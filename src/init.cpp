@@ -57,7 +57,7 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/bind.hpp>
-//#include <boost/interprocess/sync/file_lock.hpp>
+#include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/thread.hpp>
 #include <openssl/crypto.h>
 
@@ -109,6 +109,8 @@ const WalletInitInterface& g_wallet_init_interface = DummyWalletInit();
 #else
 #define MIN_CORE_FILEDESCRIPTORS 150
 #endif
+
+static const char* FEE_ESTIMATES_FILENAME="fee_estimates.dat";
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -219,6 +221,18 @@ void Shutdown()
 
     if (g_is_mempool_loaded && gArgs.GetArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL)) {
         DumpMempool();
+    }
+
+    if (fFeeEstimatesInitialized)
+    {
+        ::feeEstimator.FlushUnconfirmed();
+        fs::path est_path = GetDataDir() / FEE_ESTIMATES_FILENAME;
+        CAutoFile est_fileout(fsbridge::fopen(est_path, "wb"), SER_DISK, CLIENT_VERSION);
+        if (!est_fileout.IsNull())
+            ::feeEstimator.Write(est_fileout);
+        else
+            LogPrintf("%s: Failed to write fee estimates to %s\n", __func__, est_path.string());
+        fFeeEstimatesInitialized = false;
     }
 
     // FlushStateToDisk generates a ChainStateFlushed callback, which we should avoid missing
@@ -1566,6 +1580,13 @@ bool AppInitMain()
         LogPrintf("Shutdown requested. Exiting.\n");
         return false;
     }
+
+    fs::path est_path = GetDataDir() / FEE_ESTIMATES_FILENAME;
+    CAutoFile est_filein(fsbridge::fopen(est_path, "rb"), SER_DISK, CLIENT_VERSION);
+    // Allowed to fail as this file IS missing on first startup.
+    if (!est_filein.IsNull())
+        ::feeEstimator.Read(est_filein);
+    fFeeEstimatesInitialized = true;
 
     // ********************************************************* Step 9: load wallet
     if (!g_wallet_init_interface.Open()) return false;

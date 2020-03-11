@@ -633,7 +633,11 @@ void POSMinerThread (int POSIndex) {
                 if (!SignBlock(*pblock, *pwallet)) continue;
                 LogPrintf("POSMinerThread: proof-of-stake block found %s\n", pblock->GetHash().ToString());
                 std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(*pblock);
-                if (ProcessNewBlock(Params(), shared_pblock, true, nullptr)) { MilliSleep (10000); };
+                try {
+                    if (ProcessNewBlock(Params(), shared_pblock, true, nullptr)) { MilliSleep (10000); };
+                } catch (...) {
+                    PrintExceptionContinue(NULL, "POSMinerThread()");
+                }
             };
             MilliSleep (3000);
         };
