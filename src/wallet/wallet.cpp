@@ -1309,9 +1309,6 @@ void CWallet::BlockConnected(const std::shared_ptr<const CBlock>& pblock, const 
     // to abandon a transaction and then have it inadvertently cleared by
     // the notification that the conflicted transaction was evicted.
 
-//    LogPrintf("WALLET: connected block height=%d hash=%s date=%s\n", pindex->nHeight,
-//            pindex->GetBlockHash().ToString(), FormatISO8601DateTime(pindex->GetBlockTime())); 
-
     for (const CTransactionRef& ptx : vtxConflicted) {
         SyncTransaction(ptx);
         TransactionRemovedFromMempool(ptx);
@@ -1322,53 +1319,10 @@ void CWallet::BlockConnected(const std::shared_ptr<const CBlock>& pblock, const 
     }
 
     m_last_block_processed = pindex;
-    
-    // clear wallet
-    int64_t nTimeCheckHistory = GetTime();
-    if (nTimeCheckHistory - nLastTimeCheckHistory > 15 * 60) {          // every 15 min
-        std::vector<uint256> dellist; 
-        for (auto& entry : mapWallet) {
-            const uint256& wtxid = entry.first;             
-            CWalletTx& wtx = entry.second;
-            bool neederase = false;
-//  std::string data; 
-            if (wtx.GetTxTime() < nTimeCheckHistory - 365 * 24 * 60 * 60) {   // One year history only
-                neederase = true;
-//  data = strprintf("(%d)", wtx.tx->vout.size());
-                for (int i = 0; i < wtx.tx->vout.size(); i++) {
-//  data += strprintf("%d_%d, ", IsMine(wtx.tx->vout[i]), IsSpent(wtxid, i));
-                    if ((IsMine(wtx.tx->vout[i]) != ISMINE_NO) && !IsSpent(wtxid, i)) neederase = false;
-                }
-            }
-            if (wtx.GetTxTime() < nTimeCheckHistory - 1 * 24 * 60 * 60) {   // One week abandon history only
-                if (wtx.GetDepthInMainChain() <= 0) neederase = true;
-//  data += strprintf("spendcount=%d, ", wtx.GetDepthInMainChain());
-            }
-//            LogPrintf("WALLET(%d): hash=%s date=%s detail=%s\n", 
-//                neederase, wtxid.ToString(), FormatISO8601DateTime(wtx.GetTxTime()), data); 
-            if (neederase) dellist.push_back (wtx.GetHash());
-            if (neederase) LogPrintf("WALLET: DELETE TX hash=%s date=%s\n", wtxid.ToString(), FormatISO8601DateTime(wtx.GetTxTime())); 
-        }
-        if (dellist.size() > 0) {
-            WalletBatch batch(*database);
-            for (auto& entry : dellist) {
-//                LogPrintf("WALLET: DELETE TX hash=%s\n", entry.ToString()); 
-                const auto& it = mapWallet.find(entry);
-                mapWallet.erase(it);
-                NotifyTransactionChanged(this, entry, CT_DELETED);
-                batch.EraseTx(entry);
-            }
-        }
-
-        nLastTimeCheckHistory = nTimeCheckHistory;
-    }
 }
 
 void CWallet::BlockDisconnected(const std::shared_ptr<const CBlock>& pblock) {
     LOCK2(cs_main, cs_wallet);
-
-//    LogPrintf("WALLET: disconnected block hash=%s date=%s\n", 
-//            pblock->GetHash().ToString(), FormatISO8601DateTime(pblock->GetBlockTime())); 
 
     for (const CTransactionRef& ptx : pblock->vtx) {
         SyncTransaction(ptx);
