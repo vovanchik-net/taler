@@ -160,6 +160,7 @@ extern uint256 g_best_block;
 extern std::atomic_bool fImporting;
 extern std::atomic_bool fReindex;
 extern int nScriptCheckThreads;
+extern bool fTxIndex;
 extern bool fIsBareMultisigStd;
 extern bool fRequireStandard;
 extern bool fCheckBlockIndex;
@@ -383,9 +384,7 @@ void InitScriptExecutionCache();
 
 
 /** Functions for disk access for blocks */
-bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus::Params& consensusParams);
 bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams);
-bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CDiskBlockPos& pos, const CMessageHeader::MessageStartChars& message_start);
 bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex, const CMessageHeader::MessageStartChars& message_start);
 
 /** Functions for validating blocks and updating the block tree */
@@ -497,14 +496,11 @@ inline bool IsBlockPruned(const CBlockIndex* pblockindex)
 }
 
 void correctCoin (const COutPoint &prevout, Coin& coin, std::string caller);
-bool GetCoinAge (const CTransaction& tx, const CCoinsViewCache& view, uint64_t& nCoinAge, 
-    const Consensus::Params& params, uint32_t nTime);
-bool ComputeNextStakeModifier (const CBlockIndex* pindexCurrent, uint64_t& nStakeModifier, 
-    bool& fGeneratedStakeModifier);
-bool CheckStakeKernelHash (unsigned int nBits, uint32_t nTimeBlockFrom, unsigned int nTxPrevOffset, 
-    const CTxOut& txOutPrev, const COutPoint& prevout, unsigned int nTimeTx, uint256& hashProofOfStake);
-bool CheckProofOfStake(CValidationState& state, const CTransactionRef& tx, unsigned int nBits, 
-    uint256& hashProofOfStake, unsigned int nBlockTime);
-bool CheckStakeHash (const CBlockHeader& block, const COutPoint &pout, CAmount pvalue, uint32_t ptime);
+bool GetCoinAge (const CTransaction& tx, const CCoinsViewCache& view, uint64_t& nCoinAge, uint32_t nTime,
+    const Consensus::Params& params);
 
+bool CheckProofOfWork (const CBlockHeader& block, int height, const Consensus::Params& params); 
+bool CheckProofOfStake (const CBlockHeader& block, int height, const Consensus::Params& params, const COutPoint &out, 
+    CAmount value, uint32_t time, uint32_t offset, uint256* hashProofOfStake = nullptr);
+    
 #endif // BITCOIN_VALIDATION_H

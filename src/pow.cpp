@@ -315,19 +315,3 @@ uint32_t GetNextWorkRequired(const CBlockIndex *pindexLast, const CBlockHeader *
            GetNextWorkRequiredForPos(pindexLast, pblock, params) :
            GetNextWorkRequiredForPow(pindexLast, pblock, params);
 }
-
-bool CheckProofOfWork(uint256 hash, int nHeight, unsigned int nBits, const Consensus::Params &params) {
-    bool fNegative;
-    bool fOverflow;
-    arith_uint256 bnTarget;
-    const uint256 &powLimit = nHeight < params.nLyra2ZHeight ? params.powLimitLegacy : params.powLimit;
-
-    bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
-
-    // Check range
-    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(powLimit))
-        return false;
-
-    // Check proof of work matches claimed amount
-    return !(UintToArith256(hash) > bnTarget);
-}

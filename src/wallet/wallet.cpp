@@ -3144,16 +3144,19 @@ bool getCoinInfo (std::map<uint256, uint64_t>& cache, const COutPoint& out, uint
 //
 bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CMutableTransaction &txNew, CAmount& nPosReward)
 {
-    const Consensus::Params& consensusParams = Params().GetConsensus();
+    const Consensus::Params& consensus = Params().GetConsensus();
 
-    CBlockIndex* pindexPrev = chainActive.Tip();
-    assert(pindexPrev != nullptr);
+    CBlockIndex* pPrev = chainActive.Tip();
+    assert(pPrev != nullptr);
 
     LOCK2(cs_main, cs_wallet);
 
     txNew.vin.clear();
     txNew.vout.clear();
 
+    int nMaxSearchInterval = 60;
+    if (nSearchInterval > nMaxSearchInterval) nSearchInterval = nMaxSearchInterval;
+    
     int32_t nCoinStakeTime = header.nTime;
     // Choose coins to use
     std::vector<COutput> vCoins;
@@ -3164,32 +3167,19 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     CReserveKey key0(this);
     for (const COutput& inpcoin : vCoins) {
         CInputCoin pcoin = inpcoin.GetInputCoin(); 
-
         if (pcoin.txout.nValue < 1 * COIN) continue;
 
-        uint32_t offset, time; 
+        uint32_t offset, time;
         if (!getCoinInfo (cachedCoins, pcoin.outpoint, time, offset)) continue;
 
-        static int nMaxSearchInterval = 60;
-        if (time + consensusParams.nStakeMinAge > nCoinStakeTime - nMaxSearchInterval) {
-            continue; // only count coins meeting min age requirement
-        }
-        bool fKernelFound = false;
-        for (uint32_t n = 0; n < std::min(nSearchInterval, (int64_t)nMaxSearchInterval) && !fKernelFound; n++) {
-            // Search backward in time from the given txNew timestamp
-            // Search nSearchInterval seconds back up to nMaxSearchInterval
+        if (time + consensus.nStakeMinAge > nCoinStakeTime - nSearchInterval) continue;
 
-            if (pindexPrev->nHeight + 1 >= consensusParams.newProofHeight) {
-                header.nTime = nCoinStakeTime - n;
-                fKernelFound = CheckStakeHash (header, pcoin.outpoint, pcoin.txout.nValue, time);
-            } else {
-                uint256 hashProofOfStake;
-                fKernelFound = CheckStakeKernelHash (header.nBits, time, offset, pcoin.txout, pcoin.outpoint, 
-                    nCoinStakeTime - n, hashProofOfStake);
-            }
-            if (fKernelFound) {
+        bool fKernelFound = false;
+        for (uint32_t n = 0; n < nSearchInterval && !fKernelFound; n++) {
+            header.nTime = nCoinStakeTime - n;
+            if (CheckProofOfStake (header, pPrev->nHeight + 1, consensus, pcoin.outpoint, pcoin.txout.nValue, time, offset)) {
                 LogPrint(BCLog::SELECTCOINS, "CreateCoinStake : kernel found\n");
-                nCoinStakeTime -= n;
+                fKernelFound = true;
                 nCredit += pcoin.txout.nValue;
                 txNew.vin.push_back(CTxIn(pcoin.outpoint.hash, pcoin.outpoint.n));
                 cachedCoins.erase (pcoin.outpoint.hash);      // erase from cache
@@ -3214,18 +3204,13 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     if (nCredit == 0) return false;
 
     for (const COutput& inpcoin : vCoins) {
-        CInputCoin pcoin = inpcoin.GetInputCoin(); 
-
+        CInputCoin pcoin = inpcoin.GetInputCoin();
         if (txNew.vin.size() > 13) break;
         if (pcoin.txout.nValue > 1 * COIN) continue;
         if (txNew.vin[0].prevout == pcoin.outpoint) continue;
-
-        CBlockHeader header;
         uint32_t offset, time; 
         if (!getCoinInfo (cachedCoins, pcoin.outpoint, time, offset)) continue;
-
-        if (time + consensusParams.nStakeMaxAge > nCoinStakeTime) continue;
-
+        if (time + consensus.nStakeMinAge > header.nTime) continue;
         txNew.vin.push_back(CTxIn(pcoin.outpoint.hash, pcoin.outpoint.n));
         nCredit += pcoin.txout.nValue;
         cachedCoins.erase (pcoin.outpoint.hash);      // erase from cache
@@ -3235,9 +3220,9 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     {
         uint64_t nCoinAge;
         CCoinsViewCache view(pcoinsTip.get());
-        if (!GetCoinAge(txNew, view, nCoinAge, consensusParams, nCoinStakeTime))
+        if (!GetCoinAge(txNew, view, nCoinAge, header.nTime, consensus))
             return error("CreateCoinStake : failed to calculate coin age");
-        nPosReward = GetProofOfStakeReward(nCoinAge, chainActive.Tip()->nPowHeight ,consensusParams);
+        nPosReward = GetProofOfStakeReward(nCoinAge, chainActive.Tip()->nPowHeight, consensus);
     }
 
     CFeeRate minFeeRate = CFeeRate(DEFAULT_TRANSACTION_MINFEE);

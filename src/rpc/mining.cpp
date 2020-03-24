@@ -119,7 +119,7 @@ UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGen
     }
     unsigned int nExtraNonce = 0;
     UniValue blockHashes(UniValue::VARR);
-    const Consensus::Params& consensusParams = Params().GetConsensus(); 
+    const Consensus::Params& consensus = Params().GetConsensus(); 
     while (nHeight < nHeightEnd && !ShutdownRequested())
     {
         std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript));
@@ -130,10 +130,12 @@ UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGen
             LOCK(cs_main);
             IncrementExtraNonce(pblock, chainActive.Tip(), nExtraNonce);
         }
-        while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount && !CheckProofOfWork(pblock->GetPoWHash(nHeight + 1,consensusParams), nHeight + 1, pblock->nBits, consensusParams)) {
-            ++pblock->nNonce;
+        CBlockHeader header = pblock->GetBlockHeader();
+        while (nMaxTries > 0 && header.nNonce < nInnerLoopCount && !CheckProofOfWork(header, nHeight + 1, consensus)) {
+            ++header.nNonce;
             --nMaxTries;
         }
+        pblock->nNonce = header.nNonce;
         if (nMaxTries == 0) {
             break;
         }
@@ -141,7 +143,7 @@ UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGen
             continue;
         }
         std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(*pblock);
-        if (nHeight + 1 >= consensusParams.TLRHeight) { shared_pblock->SetNewFormatBlock(); }
+        if (nHeight + 1 >= consensus.TLRHeight) { shared_pblock->SetNewFormatBlock(); }
         if (!ProcessNewBlock(Params(), shared_pblock, true, nullptr))
             throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
         ++nHeight;

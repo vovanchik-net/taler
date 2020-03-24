@@ -387,6 +387,8 @@ void SetupServerArgs()
 #else
     hidden_args.emplace_back("-sysperms");
 #endif
+    gArgs.AddArg("-txindex", strprintf("Maintain a full transaction index, used by the getrawtransaction rpc call (default: %u)", DEFAULT_TXINDEX), false, OptionsCategory::OPTIONS);
+
     gArgs.AddArg("-addnode=<ip>", "Add a node to connect to and attempt to keep the connection open (see the `addnode` RPC command help for more info). This option can be specified multiple times to add multiple nodes.", false, OptionsCategory::CONNECTION);
     gArgs.AddArg("-banscore=<n>", strprintf("Threshold for disconnecting misbehaving peers (default: %u)", DEFAULT_BANSCORE_THRESHOLD), false, OptionsCategory::CONNECTION);
     gArgs.AddArg("-bantime=<n>", strprintf("Number of seconds to keep misbehaving peers from reconnecting (default: %u)", DEFAULT_MISBEHAVING_BANTIME), false, OptionsCategory::CONNECTION);
@@ -923,6 +925,12 @@ bool AppInitParameterInteraction()
         return InitError(strprintf(_("Specified blocks directory \"%s\" does not exist."), gArgs.GetArg("-blocksdir", "").c_str()));
     }
 
+    // if using block pruning, then disallow txindex
+    if (gArgs.GetArg("-prune", 0)) {
+        if (gArgs.GetBoolArg("-txindex", DEFAULT_TXINDEX))
+            return InitError(_("Prune mode is incompatible with -txindex."));
+    }
+
     // -bind and -whitebind can't be set when not listening
     size_t nUserBind = gArgs.GetArgs("-bind").size() + gArgs.GetArgs("-whitebind").size();
     if (nUserBind != 0 && !gArgs.GetBoolArg("-listen", DEFAULT_LISTEN)) {
@@ -1405,7 +1413,7 @@ bool AppInitMain()
     int64_t nTotalCache = (gArgs.GetArg("-dbcache", nDefaultDbCache) << 20);
     nTotalCache = std::max(nTotalCache, nMinDbCache << 20); // total cache cannot be less than nMinDbCache
     nTotalCache = std::min(nTotalCache, nMaxDbCache << 20); // total cache cannot be greater than nMaxDbcache
-    int64_t nBlockTreeDBCache = std::min(nTotalCache / 8, nMaxBlockDBCache << 20);
+    int64_t nBlockTreeDBCache = std::min(nTotalCache / 8, (gArgs.GetBoolArg("-txindex", DEFAULT_TXINDEX) ? nMaxTxIndexCache : nMaxBlockDBCache) << 20);
     nTotalCache -= nBlockTreeDBCache;
     int64_t nCoinDBCache = std::min(nTotalCache / 2, (nTotalCache / 4) + (1 << 23)); // use 25%-50% of the remainder for disk cache
     nCoinDBCache = std::min(nCoinDBCache, nMaxCoinsDBCache << 20); // cap total coins db cache
@@ -1460,6 +1468,26 @@ bool AppInitMain()
                 // (we're likely using a testnet datadir, or the other way around).
                 if (!mapBlockIndex.empty() && !LookupBlockIndex(chainparams.GetConsensus().hashGenesisBlock)) {
                     return InitError(_("Incorrect or no genesis block found. Wrong datadir for network?"));
+                }
+
+                // Check for changed -txindex state
+                if (fTxIndex != gArgs.GetBoolArg("-txindex", DEFAULT_TXINDEX)) {
+                    strLoadError = _("You need to rebuild the database using -reindex to change -txindex");
+                    if (!fReset) {
+                        bool fRet = uiInterface.ThreadSafeQuestion(
+                            strLoadError + ".\n\n" + _("Do you want to rebuild the block database now?"),
+                            strLoadError + ".\nPlease restart with -reindex or -reindex-chainstate to recover.",
+                            "", CClientUIInterface::MSG_ERROR | CClientUIInterface::BTN_ABORT);
+                        if (fRet) {
+                            fReindex = true;
+                            fReset = true;
+                            AbortShutdown();
+                            continue;
+                        } else {
+                            LogPrintf("Aborted block database rebuild. Exiting.\n");
+                            return InitError(strLoadError);
+                        }
+                    } else { fLoaded = true; break; }
                 }
 
                 // Check for changed -prune state.  What we are concerned about is a user who has pruned blocks
@@ -1553,24 +1581,7 @@ bool AppInitMain()
             LogPrintf(" block index %15dms\n", GetTimeMillis() - load_block_index_start_time);
         } while(false);
 
-        if (!fLoaded && !ShutdownRequested()) {
-            // first suggest a reindex
-            if (!fReset) {
-                bool fRet = uiInterface.ThreadSafeQuestion(
-                    strLoadError + ".\n\n" + _("Do you want to rebuild the block database now?"),
-                    strLoadError + ".\nPlease restart with -reindex or -reindex-chainstate to recover.",
-                    "", CClientUIInterface::MSG_ERROR | CClientUIInterface::BTN_ABORT);
-                if (fRet) {
-                    fReindex = true;
-                    AbortShutdown();
-                } else {
-                    LogPrintf("Aborted block database rebuild. Exiting.\n");
-                    return false;
-                }
-            } else {
-                return InitError(strLoadError);
-            }
-        }
+        if (!fLoaded && !ShutdownRequested()) return InitError(strLoadError);
     }
 
     // As LoadBlockIndex can take several minutes, it's possible the user

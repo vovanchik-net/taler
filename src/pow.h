@@ -19,7 +19,5 @@ const CBlockIndex* GetLastBlockIndex(const CBlockIndex* pindex, const Consensus:
 
 uint32_t GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params);
 
-/** Check whether a block hash satisfies the proof-of-work requirement specified by nBits */
-bool CheckProofOfWork(uint256 hash, int nHeight, unsigned int nBits, const Consensus::Params&); 
 
 #endif // BITCOIN_POW_H
