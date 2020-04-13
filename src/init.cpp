@@ -1645,6 +1645,21 @@ bool AppInitMain()
         vImportFiles.push_back(strFile);
     }
 
+    CBlockIndex *pi = chainActive.Tip();
+    if ((pi == nullptr) || (pi->pprev == nullptr)) {
+        fs::path oldblocksdir = GetDataDir() / "blocks";
+        if (fs::is_directory(oldblocksdir)) {
+            for (fs::directory_iterator it(oldblocksdir); it != fs::directory_iterator(); it++) {
+                if (fs::is_regular_file(*it) && it->path().filename().string().length() == 12 &&
+                                                it->path().filename().string().substr(0,3) == "blk" &&
+                                                it->path().filename().string().substr(8,4) == ".dat") {
+                    vImportFiles.push_back(it->path());
+                }
+            }
+            //LogPrintf("Need get\n");
+        }
+    }
+
     threadGroup.create_thread(boost::bind(&ThreadImport, vImportFiles));
 
     // Wait for genesis block to be processed

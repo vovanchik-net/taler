@@ -1204,6 +1204,9 @@ CAmount GetCoinSupply(int nPowHeight, const Consensus::Params& consensusParams)
 
 CAmount GetBlockSubsidy(int nPowHeight, const Consensus::Params& consensusParams)
 {
+    if (nPowHeight >= consensusParams.newProofHeight) 
+        return ((44 - std::min((nPowHeight - consensusParams.newProofHeight) >> 16, 40)) * COIN) >> 2;
+    
     if (nPowHeight == 1) {
         return CAmount(2333333 * COIN);
     }
@@ -2120,11 +2123,15 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                                      REJECT_INVALID, "bad-txns-coinstake-fee-too-small");
                 }
 
-                uint64_t nCoinAge;
-                if (!GetCoinAge(tx, view, nCoinAge, block.GetBlockTime(), consensus))
-                    return error("CheckInputs() : %s unable to get coin age for coinstake", tx.GetHash().ToString());
+                if (pindex->nHeight >= consensus.newProofHeight) {
+                    posReward = GetBlockSubsidy (pindex->nHeight, consensus);
+                } else {
+                    uint64_t nCoinAge;
+                    if (!GetCoinAge(tx, view, nCoinAge, block.GetBlockTime(), consensus))
+                        return error("CheckInputs() : %s unable to get coin age for coinstake", tx.GetHash().ToString());
 
-                posReward = GetProofOfStakeReward(nCoinAge,pindex->nPowHeight,consensus);
+                    posReward = GetProofOfStakeReward(nCoinAge,pindex->nPowHeight,consensus);
+                }    
             }
 
             // Check that transaction is BIP68 final
@@ -2255,7 +2262,7 @@ bool GetCoinAge(const CTransaction& tx, const CCoinsViewCache& view, uint64_t& n
         bnCentSecond += arith_uint256(nValueIn) * (nTime - coin.nTime) / CENT;
         LogPrint(BCLog::SELECTCOINS, "coin age nValueIn=%-12lld nTimeDiff=%d bnCentSecond=%s\n", nValueIn, nTime - coin.nTime, bnCentSecond.ToString());
     }
-    arith_uint256 bnCoinDay = bnCentSecond * CENT / COIN / (24 * 60 * 60);
+    arith_uint256 bnCoinDay = bnCentSecond * CENT / COIN / params.nCoinAgeTick;
     LogPrint(BCLog::SELECTCOINS, "coin age bnCoinDay=%s\n", bnCoinDay.ToString());
     nCoinAge = bnCoinDay.GetLow64();
     return true;
@@ -2263,20 +2270,17 @@ bool GetCoinAge(const CTransaction& tx, const CCoinsViewCache& view, uint64_t& n
 
 bool CheckProofOfStake (const CBlockHeader& block, int height, const Consensus::Params& params, const COutPoint &out, 
             CAmount value, uint32_t time, uint32_t offset, uint256* hashProofOfStake) {
-    if (time + params.nStakeMinAge > block.GetBlockTime()) return false;
-    arith_uint256 bnTargetPerCoinDay;
-    bnTargetPerCoinDay.SetCompact(block.nBits);
-    int64_t nTimeWeight = std::min((int64_t)block.GetBlockTime() - time, params.nStakeMaxAge) - params.nStakeMinAge;
-    arith_uint256 bnCoinDayWeight = arith_uint256(value) * nTimeWeight / COIN / (24 * 60 * 60);
-
-    uint64_t nStakeModifier = 0;
-    int nStakeModifierHeight = 0;
+    arith_uint256 bnTarget;
+    bnTarget.SetCompact(block.nBits);
     CDataStream ss(SER_GETHASH, 0);
     if (height >= params.newProofHeight) {
+        bnTarget *= std::min((int)((block.nTime - time) / params.nCoinAgeTick), 33) * std::min((int)(value / COIN), 999);
         ss << out.n << block.hashPrevBlock << out.hash << block.nTime << block.nBits << 0; 
     } else {
+        int64_t nTimeWeight = std::min((int64_t)block.nTime - time, params.nStakeMaxAge) - params.nStakeMinAge;
+        bnTarget *= arith_uint256(value) * nTimeWeight / COIN / params.nCoinAgeTick;
         const CBlockIndex* pindex = chainActive.Tip();
-        nStakeModifierHeight = pindex->nHeight;
+        int nStakeModifierHeight = pindex->nHeight;
         int64_t nStakeModifierTime = pindex->GetBlockTime();
         int64_t nStakeModifierBound = GetStakeModifierSelectionInterval() + time - params.nStakeMinAge;
         if (nStakeModifierTime <= nStakeModifierBound) return false;
@@ -2288,16 +2292,13 @@ bool CheckProofOfStake (const CBlockHeader& block, int height, const Consensus::
                 nStakeModifierTime = pindex->GetBlockTime();
             }
         }
-        nStakeModifier = pindex->nStakeModifier;
+        uint64_t nStakeModifier = pindex->nStakeModifier;
         ss << nStakeModifier << time << offset << time << out.n << block.nTime;
+        LogPrint(BCLog::SELECTCOINS, "CheckProofOfStake(): using modifier 0x%016" PRIx64 " at height=%d\n", nStakeModifier, nStakeModifierHeight);
     }
     uint256 hash = Hash(ss.begin(), ss.end());
-    if (height < params.newProofHeight)
-        LogPrint(BCLog::SELECTCOINS, "CheckProofOfStake(): using modifier 0x%016" PRIx64 " at height=%d\n",
-            nStakeModifier, nStakeModifierHeight);
-    LogPrint(BCLog::SELECTCOINS, "CheckProofOfStake(): TimeBlockFrom=%u TxPrevOffset=%u Prevout=%u TimeTx=%u hash=%s\n",
-        time, offset, out.n, block.GetBlockTime(), hash.ToString());
-    if (UintToArith256(hash) > bnCoinDayWeight * bnTargetPerCoinDay) return false;
+    LogPrint(BCLog::SELECTCOINS, "CheckProofOfStake(): TimeBlockFrom=%u TimeTx=%u hash=%s\n", time, block.nTime, hash.ToString());
+    if (UintToArith256(hash) > bnTarget) return false;
     if (hashProofOfStake) *hashProofOfStake = hash;
     return true;
 }
@@ -2370,6 +2371,7 @@ bool static FlushStateToDisk(const CChainParams& chainparams, CValidationState &
         bool fCacheLarge = mode == FlushStateMode::PERIODIC && cacheSize > std::max((9 * nTotalSpace) / 10, nTotalSpace - MAX_BLOCK_COINSDB_USAGE * 1024 * 1024);
         // The cache is over the limit, we have to write now.
         bool fCacheCritical = mode == FlushStateMode::IF_NEEDED && cacheSize > nTotalSpace;
+        fCacheCritical |= mode == FlushStateMode::IF_NEEDED && nNow > nLastFlush + (int64_t) 600000000;
         // It's been a while since we wrote the block index to disk. Do this frequently, so we don't need to redownload after a crash.
         bool fPeriodicWrite = mode == FlushStateMode::PERIODIC && nNow > nLastWrite + (int64_t)DATABASE_WRITE_INTERVAL * 1000000;
         // It's been very long since we flushed the cache. Do this infrequently, to optimize cache usage.

@@ -1,5 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
+// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -205,5 +206,8 @@ std::string JSONRPCExecBatch(const JSONRPCRequest& jreq, const UniValue& vReq);
 
 // Retrieves any serialization flags requested in command line argument
 int RPCSerializationFlags();
+
+bool toInt32 (const JSONRPCRequest& request, int idx, uint32_t& val, UniValue& ret);
+bool toInt64 (const JSONRPCRequest& request, int idx, uint64_t& val, UniValue& ret);
 
 #endif // BITCOIN_RPC_SERVER_H

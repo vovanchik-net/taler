@@ -77,6 +77,7 @@ public:
         consensus.nMinerConfirmationWindow = 8064;
         consensus.nPosTargetTimespan = 14 * 24 * 60 * 60;       // two weeks
         consensus.nPosTargetSpacing = 60 * 7 / 3;
+        consensus.nCoinAgeTick = 60 * 60 * 24;
         consensus.nStakeMinAge = 60 * 60 * 24 * 2;              // minimum age for coin age  
         consensus.nStakeMaxAge = 60 * 60 * 24 * 90;             // stake age of full weight
         consensus.nStakeModifierInterval = 6 * 60 * 60;         // time to elapse before new modifier is computed
@@ -90,9 +91,7 @@ public:
         consensus.nPowAveragingWindowv2 = 120;
         
         consensus.newProofHeight = 10000000;
-        consensus.newTargetTimespan = 3 * 60 * 60;              // 3 hour
-        consensus.newTargetSpacingPoW = 2.5 * 60;               // 2.5 min 
-        consensus.newTargetSpacingPoS = 5.5 * 60;               // 5.5 min 
+        consensus.newTargetSpacing = 2.5 * 60;                  // 2.5 min 
         consensus.newLimitShift = 24;
 
         // The best chain should have at least this much work.
@@ -115,7 +114,6 @@ public:
 
         genesis = CreateGenesisBlock (1505338813, 725170, 0x1e0ffff0, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        LogPrintf("found1 is %s\n", consensus.hashGenesisBlock.ToString());
         assert(consensus.hashGenesisBlock ==
                uint256S("0xc079fd1ae86223e1522928776899d46e329da7919ca1e11be23643c67dd05d5f"));
         assert(genesis.hashMerkleRoot ==
@@ -128,7 +126,7 @@ public:
         vSeeds.clear();
         vSeeds.emplace_back("dnsseed.talercrypto.com");
         vSeeds.emplace_back("dnsseed.mikalair.me");
-        vSeeds.emplace_back("coin.vovanchik.net");
+        vSeeds.emplace_back("taler.vovanchik.net");
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 65);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 50);
@@ -182,10 +180,10 @@ public:
         consensus.nSubsidyHalvingInterval = 20000;
         consensus.BIP34Height = 0;
         consensus.BIP34Hash = uint256();
-        consensus.BIP65Height = 10;
-        consensus.BIP66Height = 10;
-        consensus.CSVHeight = 10;
-        consensus.WitnessHeight = 10;
+        consensus.BIP65Height = 5;
+        consensus.BIP66Height = 5;
+        consensus.CSVHeight = 5;
+        consensus.WitnessHeight = 5;
 
         consensus.powLimit = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powLimitLegacy = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
@@ -197,23 +195,22 @@ public:
         consensus.nMinerConfirmationWindow = 10;
         consensus.nPosTargetTimespan = 14 * 24 * 60 * 60;       // two weeks
         consensus.nPosTargetSpacing = 60 * 7 / 3;
+        consensus.nCoinAgeTick = 60 * 60;
         consensus.nStakeMinAge = 60 * 60 * 3;                   // minimum age for coin age  
         consensus.nStakeMaxAge = 60 * 60 * 24 * 3;              // stake age of full weight
         consensus.nStakeModifierInterval = 6 * 60;              // time to elapse before new modifier is computed
         consensus.posLimit = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 
         consensus.nLyra2ZHeight = 10;
-        consensus.nPowAveragingWindowv1 = 24;
-        consensus.TLRHeight = 120;
-        consensus.TLRInitLim = 50;
+        consensus.nPowAveragingWindowv1 = 5;
+        consensus.TLRHeight = 20;
+        consensus.TLRInitLim = 5;
         consensus.nNewDiffAdjustmentAlgorithmHeight = 21000;
         consensus.nPowAveragingWindowv2 = 120;
 
-        consensus.newProofHeight = 100;
-        consensus.newTargetTimespan = 3 * 60 * 60;              // 3 hour
-        consensus.newTargetSpacingPoW = 2.5 * 60;               // 2.5 min 
-        consensus.newTargetSpacingPoS = 5.5 * 60;               // 5.5 min 
-        consensus.newLimitShift = 24;
+        consensus.newProofHeight = 30;
+        consensus.newTargetSpacing = 1 * 60;                    // 1 min 
+        consensus.newLimitShift = 16;
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");
@@ -228,11 +225,10 @@ public:
         nDefaultPort = 18333;
         nPruneAfterHeight = 10000;
  
-        genesis = CreateGenesisBlock(1317798646, 393879, 0x1e0ffff0, 1, 50 * COIN);
+        genesis = CreateGenesisBlock (1505338823, 61468, 0x1f00ffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        LogPrintf("test_found is %s\n", consensus.hashGenesisBlock.ToString());
-        //assert(consensus.hashGenesisBlock ==
-        //       uint256S("0xc079fd1ae86223e1522928776899d46e329da7919ca1e11be23643c67dd05d5f"));
+        assert(consensus.hashGenesisBlock ==
+               uint256S("0xf3b7fe4392b75efcaeb9fe5a617912a763572c69d088896bfe3cf796b1a6a866"));
         assert(genesis.hashMerkleRoot ==
                uint256S("0x985fae483ebbef9cde04a259282cb7465d52bf56824caf1a8132395e90488b12")); 
 

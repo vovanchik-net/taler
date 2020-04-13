@@ -1262,7 +1262,7 @@ void CWallet::MarkConflicted(const uint256& hashBlock, const uint256& hashTx)
 }
 
 void CWallet::SyncTransaction(const CTransactionRef& ptx, const CBlockIndex *pindex, int posInBlock, bool update_tx) {
-    if (pindex == nullptr) {
+    if ((pindex == nullptr) && (posInBlock == 0)) {
         auto it = mapWallet.find(ptx->GetHash());
         if (it != mapWallet.end()) {
             CWalletTx& wtx = it->second;
@@ -1283,7 +1283,7 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const CBlockIndex *pin
 
 void CWallet::TransactionAddedToMempool(const CTransactionRef& ptx) {
     LOCK2(cs_main, cs_wallet);
-    SyncTransaction(ptx);
+    SyncTransaction(ptx, nullptr, 1);
 
     auto it = mapWallet.find(ptx->GetHash());
     if (it != mapWallet.end()) {
@@ -3217,7 +3217,9 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     }
 
     // Calculate coin age reward
-    {
+    if (pPrev->nHeight + 1 >= consensus.newProofHeight) {
+        nPosReward = GetBlockSubsidy (pPrev->nHeight + 1, consensus);
+    } else {
         uint64_t nCoinAge;
         CCoinsViewCache view(pcoinsTip.get());
         if (!GetCoinAge(txNew, view, nCoinAge, header.nTime, consensus))

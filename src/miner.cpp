@@ -146,6 +146,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
         pblock->SetProofOfStake();
         pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
+        pblock->hashPrevBlock = pindexPrev->GetBlockHash();
         CMutableTransaction txCoinStake;
         nCoinStakeTime = GetAdjustedTime();
         int64_t nSearchTime = nCoinStakeTime;
@@ -542,22 +543,24 @@ void POWMinerThread (int POWIndex) {
             if (!pblocktemplate.get()) continue;
             CBlock *pblock = &pblocktemplate->block;
             IncrementExtraNonce(pblock, chainActive.Tip(), extra);
-            int nMaxTries = POWTries, nSaveMaxTries = POWTries;
+            int nMaxTries = POWTries;
             bool fNegative, fOverflow;
             arith_uint256 bnTarget;
             bnTarget.SetCompact (pblock->nBits, &fNegative, &fOverflow);
-            while (nMaxTries > 0 && (UintToArith256(pblock->GetHash()) >= bnTarget)) {
+            const Consensus::Params& consensus = Params().GetConsensus();
+            int nHeight = chainActive.Tip()->nHeight + 1;
+            while ((nMaxTries > 0) && (UintToArith256(pblock->GetPoWHash(nHeight, consensus)) >= bnTarget)) {
                 pblock->nNonce++;
                 nMaxTries--;
             }
             nTime = GetTimeMillis() - nTime; if (nTime < 1) nTime = 1;
-            LogPrintf("POWMinerThread %d speed is %d kb\n", POWIndex, (nSaveMaxTries-nMaxTries) / nTime);
+            LogPrintf("POWMinerThread %d speed is %d kb\n", POWIndex, (POWTries-nMaxTries) / nTime);
             if ((nTime < 15000) || (nTime > 45000)) {
-                POWTries = ((nSaveMaxTries-nMaxTries) / nTime) * 30000;
-                if (POWTries < 0x0000FFFF) POWTries = 0x0000FFFF;
+                POWTries = ((POWTries-nMaxTries) / nTime) * 30000;
+                if (POWTries < 0x00000FFF) POWTries = 0x00000FFF;
             }
             if (nMaxTries == 0) { continue; }
-            if (UintToArith256(pblock->GetHash()) >= bnTarget) { continue; }
+            if (UintToArith256(pblock->GetPoWHash(nHeight, consensus)) >= bnTarget) { continue; }
             std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(*pblock);
             if (!ProcessNewBlock(Params(), shared_pblock, true, nullptr))
                 LogPrintf("POWMinerThread: ProcessNewBlock, block not accepted...\n");

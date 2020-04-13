@@ -11,33 +11,6 @@
 #include <primitives/block.h>
 #include <uint256.h>
 
-uint32_t GetNextWork (const CBlockIndex *pLast, const Consensus::Params &params, bool fProofOfStake) {
-    //v1.3 Calc difficulty PoW & PoS. Copyright by Uladzimir(https://t.me/vovanchik_net)
-    arith_uint256 bnOld, bnNew, bnLimit = (~arith_uint256 (0)) >> params.newLimitShift;
-    const CBlockIndex* pPrev = pLast;
-    int64_t srcTimes = 0;
-    int64_t destTimes = params.newTargetTimespan;
-    int64_t destSpacing = fProofOfStake ? params.newTargetSpacingPoS : params.newTargetSpacingPoW;
-    int64_t destBlockCount = destTimes / destSpacing;
-    int64_t LastNonBlockCount = 0;
-    for (int i = 0; i < destBlockCount; i++) {
-        while (pPrev && (pPrev->IsProofOfStake() != fProofOfStake)) pPrev = pPrev->pprev;
-        if (pPrev == nullptr) return bnLimit.GetCompact();
-        if (pPrev->pprev == nullptr) return bnLimit.GetCompact();
-        if (i == 0) { bnOld.SetCompact (pPrev->nBits); LastNonBlockCount = pLast->nHeight - pPrev->nHeight; }
-        if (i < 12) { bnNew = ((bnNew * i) + (arith_uint256().SetCompact(pPrev->nBits))) / (i + 1); }
-        srcTimes += (pPrev->GetBlockTime() - pPrev->pprev->GetBlockTime());
-        pPrev = pPrev->pprev;
-    }
-    bnNew /= destTimes;
-    bnNew *= srcTimes;
-    while (LastNonBlockCount > 5) { bnNew *= 2; LastNonBlockCount--; if (bnNew > bnLimit) break; }
-    if (bnNew > bnOld*4) bnNew = bnOld*4;
-    if (bnNew < bnOld/4) bnNew = bnOld/4;
-    if (bnNew > bnLimit) bnNew = bnLimit;
-    return bnNew.GetCompact();
-}
-
 //pos: find last block index up to pindex
 const CBlockIndex *GetLastBlockIndex(const CBlockIndex *pindex, const Consensus::Params &params, bool fProofOfStake) {
     const int32_t TLRHeight = params.TLRHeight;
@@ -54,6 +27,40 @@ const CBlockIndex *GetLastBlockIndex(const CBlockIndex *pindex, const Consensus:
     }
 
     return pindex;
+}
+
+uint32_t
+GetNextWorkRequiredForPos(const CBlockIndex *pindexLast, const CBlockHeader *pblock, const Consensus::Params &params) {
+    assert((pindexLast->nHeight + 1) > params.TLRHeight + params.TLRInitLim);
+
+    const CBlockIndex *pindexPrev = GetLastBlockIndex(pindexLast, params, true);
+    if (pindexPrev == nullptr)
+        return UintToArith256(params.posLimit).GetCompact();
+
+    const CBlockIndex *pindexPrevPrev = GetLastBlockIndex(pindexPrev->pprev, params, true);
+    if (pindexPrevPrev == nullptr || pindexPrevPrev->pprev == nullptr)
+        return UintToArith256(params.posLimit).GetCompact();
+
+    const int64_t nActualSpacing = pindexPrev->GetBlockTime() - pindexPrevPrev->GetBlockTime();
+    const int64_t nInterval = params.DifficultyAdjustmentIntervalPos();
+    arith_uint256 nProofOfWorkLimit = UintToArith256(params.powLimit);
+    arith_uint256 bnNew;
+    bnNew.SetCompact(pindexPrev->nBits);
+    bnNew *= ((nInterval - 1) * params.nPosTargetSpacing + nActualSpacing + nActualSpacing);
+    //overflow fix
+    if((pindexLast->nHeight + 1)>=730000)
+    {
+        arith_uint256 powLimit = UintToArith256(uint256S("dfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
+        if (bnNew > powLimit)
+            bnNew = powLimit;
+    }
+    //    
+    bnNew /= ((nInterval + 1) * params.nPosTargetSpacing);
+
+    if (bnNew > nProofOfWorkLimit)
+        bnNew = nProofOfWorkLimit;
+
+    return bnNew.GetCompact();
 }
 
 unsigned int
@@ -273,37 +280,28 @@ GetNextWorkRequiredForPow(const CBlockIndex *pindexLast, const CBlockHeader *pbl
     return DarkGravityWave(pindexLast, params);
 }
 
-uint32_t
-GetNextWorkRequiredForPos(const CBlockIndex *pindexLast, const CBlockHeader *pblock, const Consensus::Params &params) {
-    assert((pindexLast->nHeight + 1) > params.TLRHeight + params.TLRInitLim);
-
-    const CBlockIndex *pindexPrev = GetLastBlockIndex(pindexLast, params, true);
-    if (pindexPrev == nullptr)
-        return UintToArith256(params.posLimit).GetCompact();
-
-    const CBlockIndex *pindexPrevPrev = GetLastBlockIndex(pindexPrev->pprev, params, true);
-    if (pindexPrevPrev == nullptr || pindexPrevPrev->pprev == nullptr)
-        return UintToArith256(params.posLimit).GetCompact();
-
-    const int64_t nActualSpacing = pindexPrev->GetBlockTime() - pindexPrevPrev->GetBlockTime();
-    const int64_t nInterval = params.DifficultyAdjustmentIntervalPos();
-    arith_uint256 nProofOfWorkLimit = UintToArith256(params.powLimit);
-    arith_uint256 bnNew;
-    bnNew.SetCompact(pindexPrev->nBits);
-    bnNew *= ((nInterval - 1) * params.nPosTargetSpacing + nActualSpacing + nActualSpacing);
-    //overflow fix
-    if((pindexLast->nHeight + 1)>=730000)
-    {
-        arith_uint256 powLimit = UintToArith256(uint256S("dfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
-        if (bnNew > powLimit)
-            bnNew = powLimit;
+uint32_t GetNextWork (const CBlockIndex *pLast, const Consensus::Params &params, bool fProofOfStake) {
+    //v1.3 Calc difficulty PoW & PoS. Copyright by Uladzimir(https://t.me/vovanchik_net)
+    arith_uint256 bnOld, bnNew, bnLimit = (~arith_uint256 (0)) >> params.newLimitShift;
+    const CBlockIndex* pPrev = pLast;
+    int64_t srcTimes = 0;
+    int64_t destBlockCount = 24;
+    int64_t LastNonBlockCount = 0;
+    for (int i = 0; i < destBlockCount; i++) {
+        while (pPrev && (pPrev->IsProofOfStake() != fProofOfStake)) pPrev = pPrev->pprev;
+        if (pPrev == nullptr) return bnLimit.GetCompact();
+        if (pPrev->pprev == nullptr) return bnLimit.GetCompact();
+        if (i == 0) { bnOld.SetCompact (pPrev->nBits); LastNonBlockCount = pLast->nHeight - pPrev->nHeight; }
+        if (i < 12) { bnNew = ((bnNew * i) + (arith_uint256().SetCompact(pPrev->nBits))) / (i + 1); }
+        srcTimes += (pPrev->GetBlockTime() - pPrev->pprev->GetBlockTime());
+        pPrev = pPrev->pprev;
     }
-    //    
-    bnNew /= ((nInterval + 1) * params.nPosTargetSpacing);
-
-    if (bnNew > nProofOfWorkLimit)
-        bnNew = nProofOfWorkLimit;
-
+    bnNew /= destBlockCount * params.newTargetSpacing;
+    bnNew *= srcTimes;
+    while (LastNonBlockCount > 5) { bnNew *= 2; LastNonBlockCount--; if (bnNew > bnLimit) break; }
+    if (bnNew > bnOld*4) bnNew = bnOld*4;
+    if (bnNew < bnOld/4) bnNew = bnOld/4;
+    if (bnNew > bnLimit) bnNew = bnLimit;
     return bnNew.GetCompact();
 }
 

@@ -60,15 +60,15 @@ static CUpdatedBlock latestblock;
 
 /* Calculate the difficulty for a given block index.
  */
-double GetDifficulty (const CBlockIndex* blockindex, bool fPowOnly)
+double GetDifficulty (bool fLast, const CBlockIndex* blockindex, bool fPow)
 {
+    if (fLast) blockindex = chainActive.Tip();
     if (blockindex == nullptr)
     {
         return 1.0;
     }
-
-    if (fPowOnly) {
-        while (blockindex->pprev && blockindex->IsProofOfStake()) {
+    if (fLast) {
+        while (blockindex->pprev && (blockindex->IsProofOfStake() == fPow)) {
             blockindex = blockindex->pprev;
         }
     }
@@ -109,7 +109,7 @@ UniValue blockheaderToJSON(const CBlockIndex* blockindex)
     result.pushKV("mediantime", (int64_t)blockindex->GetMedianTimePast());
     result.pushKV("nonce", (uint64_t)blockindex->nNonce);
     result.pushKV("bits", strprintf("%08x", blockindex->nBits));
-    result.pushKV("difficulty", GetDifficulty(blockindex, false));
+    result.pushKV("difficulty", GetDifficulty(false, blockindex, false));
     result.pushKV("chainwork", blockindex->nChainWork.GetHex());
     result.pushKV("nTx", (uint64_t)blockindex->nTx);
 
@@ -158,7 +158,7 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
     result.pushKV("mediantime", (int64_t)blockindex->GetMedianTimePast());
     result.pushKV("nonce", (uint64_t)block.nNonce);
     result.pushKV("bits", strprintf("%08x", block.nBits));
-    result.push_back(Pair("difficulty", GetDifficulty(blockindex, false)));
+    result.pushKV("difficulty", GetDifficulty(false, blockindex, false));
     result.pushKV("chainwork", blockindex->nChainWork.GetHex());
     result.pushKV("nTx", (uint64_t)blockindex->nTx);
 
@@ -371,8 +371,8 @@ static UniValue getdifficulty(const JSONRPCRequest& request)
 
     LOCK(cs_main);
     UniValue obj(UniValue::VOBJ);
-    obj.push_back(Pair("proof-of-work",        (double)GetDifficulty()));
-    obj.push_back(Pair("proof-of-stake",       (double)GetDifficulty(GetLastBlockIndex(chainActive.Tip(), Params().GetConsensus(), true), false)));
+    obj.push_back(Pair("proof-of-work",        (double)GetDifficulty(true, nullptr, true)));
+    obj.push_back(Pair("proof-of-stake",       (double)GetDifficulty(true, nullptr, false)));
     obj.push_back(Pair("search-interval",      (int)nLastCoinStakeSearchInterval));
     return obj;
 }
@@ -1193,22 +1193,6 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
             "        },\n"
             "     }, ...\n"
             "  ],\n"
-            "  \"bip9_softforks\": {           (object) status of BIP9 softforks in progress\n"
-            "     \"xxxx\" : {                 (string) name of the softfork\n"
-            "        \"status\": \"xxxx\",       (string) one of \"defined\", \"started\", \"locked_in\", \"active\", \"failed\"\n"
-            "        \"bit\": xx,              (numeric) the bit (0-28) in the block version field used to signal this softfork (only for \"started\" status)\n"
-            "        \"startTime\": xx,        (numeric) the minimum median time past of a block at which the bit gains its meaning\n"
-            "        \"timeout\": xx,          (numeric) the median time past of a block at which the deployment is considered failed if not yet locked in\n"
-            "        \"since\": xx,            (numeric) height of the first block to which the status applies\n"
-            "        \"statistics\": {         (object) numeric statistics about BIP9 signalling for a softfork (only for \"started\" status)\n"
-            "           \"period\": xx,        (numeric) the length in blocks of the BIP9 signalling period \n"
-            "           \"threshold\": xx,     (numeric) the number of blocks with the version bit set required to activate the feature \n"
-            "           \"elapsed\": xx,       (numeric) the number of blocks elapsed since the beginning of the current period \n"
-            "           \"count\": xx,         (numeric) the number of blocks with the version bit set in the current period \n"
-            "           \"possible\": xx       (boolean) returns false if there are not enough blocks left in this period to pass activation threshold \n"
-            "        }\n"
-            "     }\n"
-            "  }\n"
             "  \"warnings\" : \"...\",           (string) any network and blockchain warnings.\n"
             "}\n"
             "\nExamples:\n"
@@ -1224,9 +1208,8 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
     obj.pushKV("headers",               pindexBestHeader ? pindexBestHeader->nHeight : -1);
     obj.pushKV("bestblockhash",         chainActive.Tip()->GetBlockHash().GetHex());
     UniValue difficulty(UniValue::VOBJ);
-    difficulty.push_back(Pair("proof-of-work",  (double)GetDifficulty()));
-    difficulty.push_back(Pair("proof-of-stake", (double)GetDifficulty(GetLastBlockIndex(chainActive.Tip(), Params().GetConsensus(), true), false)));
-
+    difficulty.push_back(Pair("proof-of-work",  (double)GetDifficulty(true, nullptr, true)));
+    difficulty.push_back(Pair("proof-of-stake", (double)GetDifficulty(true, nullptr, false)));
     obj.push_back(Pair("difficulty",            difficulty));
     obj.pushKV("mediantime",            (int64_t)chainActive.Tip()->GetMedianTimePast());
     obj.pushKV("verificationprogress",  GuessVerificationProgress(Params().TxData(), chainActive.Tip()));
@@ -2231,15 +2214,6 @@ std::string getOutAddr (const CScript& script, int* stdd = NULL) {
     return ScriptToAsmStr ( script, true);
 }
 
-bool getIntParams (const JSONRPCRequest& request, int idx, int& val, UniValue& ret) {
-	if (!request.params[idx].isNull()) {
-		int a = val;
-		if (ParseInt32(request.params[idx].get_str(), &a)) { val = a; return true; }
-		ret.push_back(Pair(strprintf("param%d", idx), "false")); 
-		return false;
-    } else return true;	
-}
-
 void setProgress (int p1, int p2) {
 	//if (p1 > 0) uiInterface.ShowProgress(_("xcash..."), p1/100000);
 //	if (p1 >= 0) setInfo (1, p1);
@@ -2260,11 +2234,11 @@ UniValue dumpcoin (const JSONRPCRequest& request) {
             + HelpExampleCli("dumpcoin", "")
 		);
 		
-	int cnt1 = 0;
-	int cnt2 = 0;
-	int border = 1000;
+    int cnt1 = 0;
+    int cnt2 = 0;
+    uint64_t border = 1000;
     UniValue ret(UniValue::VOBJ);
-	if (!getIntParams(request, 0, border, ret)) return ret;
+    if (!toInt64 (request, 0, border, ret)) return ret;
 
 	CCoinsViewDB pcoinsdbview2(0);
  
@@ -2301,15 +2275,14 @@ UniValue dumpblock (const JSONRPCRequest& request) {
             + HelpExampleCli("dumpblock", "")
         );
 
-	int startblock = 9999999;
-	int numblock = 33;
-	int ext = 0;
+    uint32_t startblock = 9999999;
+    uint32_t numblock = 33;
+    uint32_t ext = 0;
     UniValue ret(UniValue::VOBJ);
-	if (!getIntParams(request, 0, startblock, ret)) return ret;
-	if (!getIntParams(request, 1, numblock, ret)) return ret;
-	if (!getIntParams(request, 2, ext, ret)) return ret;
-
-	int n = chainActive.Height(), m = 0;
+    if (!toInt32 (request, 0, startblock, ret)) return ret;
+    if (!toInt32 (request, 1, numblock, ret)) return ret;
+    if (!toInt32 (request, 2, ext, ret)) return ret;
+    uint32_t n = chainActive.Height(), m = 0;
 	if (startblock > n) { if (numblock < n) { m = n - numblock; } } 
 				else	{ if (numblock < (n - startblock)) 	{ m = startblock; n = m + numblock; } else 
 															{ m = startblock; } }
@@ -2468,20 +2441,6 @@ UniValue dumpinfo (const JSONRPCRequest& request) {
     return ret;
 }
 
-double GetDifff (int nBits) {
-    int nShift = (nBits >> 24) & 0xff;
-    double dDiff = (double)0x0000ffff / (double)(nBits & 0x00ffffff);
-    while (nShift < 29) {
-        dDiff *= 256.0;
-        nShift++;
-    }
-    while (nShift > 29) {
-        dDiff /= 256.0;
-        nShift--;
-    }
-    return dDiff;
-}
-
 UniValue dumpdiff (const JSONRPCRequest& request) {
     if (request.fHelp)
         throw std::runtime_error(
@@ -2490,10 +2449,10 @@ UniValue dumpdiff (const JSONRPCRequest& request) {
             + HelpExampleCli("dumpdiff", "")
         );
 
-    int64_t needpow = Params().GetConsensus().newTargetTimespan;
-    int64_t needpos = Params().GetConsensus().newTargetTimespan;
-    int64_t powcnt = needpow / Params().GetConsensus().newTargetSpacingPoW;
-    int64_t poscnt = needpos / Params().GetConsensus().newTargetSpacingPoS;
+    int64_t powcnt = 24;
+    int64_t poscnt = 24;
+    int64_t needpow = Params().GetConsensus().newTargetSpacing * powcnt;
+    int64_t needpos = Params().GetConsensus().newTargetSpacing * poscnt;
     if (Params().NetworkIDString() == "main") {
         powcnt = 120;
         poscnt = 2;
@@ -2522,11 +2481,11 @@ UniValue dumpdiff (const JSONRPCRequest& request) {
         }
         if (fProofOfStake) {
             logWrite (strprintf("chainPOS = %7d, diff = %10.6f, Actual = %7d, Target = %7d, Speed = %4d%%, time = %s", 
-                i, GetDifff (pblockindex->nBits), actt, needt, ((actt != 0) ? (needt * 100) / actt : -1), 
+                i, GetDifficulty(false, pblockindex, false), actt, needt, ((actt != 0) ? (needt * 100) / actt : -1), 
                 FormatISO8601DateTime(pblockindex->GetBlockTime())));
         } else {
             logWrite (strprintf("chainPOW = %7d, diff = %10.6f, Actual = %7d, Target = %7d, Speed = %4d%%, time = %s", 
-                i, GetDifff (pblockindex->nBits), actt, needt, ((actt != 0) ? (needt * 100) / actt : -1), 
+                i, GetDifficulty(false, pblockindex, false), actt, needt, ((actt != 0) ? (needt * 100) / actt : -1), 
                 FormatISO8601DateTime(pblockindex->GetBlockTime())));
         }
     }

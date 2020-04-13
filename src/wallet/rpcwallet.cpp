@@ -4943,15 +4943,15 @@ UniValue setgenerate (const JSONRPCRequest& request) {
             "\nUsing json rpc\n" + HelpExampleRpc("setgenerate", "1")
         );
     }
-	int cnt = 0;
-    if (!request.params[0].isNull()) { cnt = request.params[0].get_int(); }
-    UniValue result(UniValue::VOBJ);
-    result.push_back(Pair("minerPOWRequest", (cnt > 0) ? cnt : 0));
-    result.push_back(Pair("minerPOSRequest", (cnt == 0) ? 1 : 0));
+    uint32_t cnt = 0;
+    UniValue ret(UniValue::VOBJ);
+    if (!toInt32 (request, 0, cnt, ret)) return ret;
+    ret.pushKV ("minerPOWRequest", (cnt > 0) ? (int)cnt : 0);
+    ret.pushKV ("minerPOSRequest", (cnt == 0) ? 1 : 0);
     int n = generateCoin (cnt);
-    result.push_back(Pair("minerPOWCount", (n > 0) ? n : 0));
-    result.push_back(Pair("minerPOSCount", (n == 0) ? 1 : 0));
-    return result;
+    ret.pushKV ("minerPOWCount", (n > 0) ? n : 0);
+    ret.pushKV ("minerPOSCount", (n == 0) ? 1 : 0);
+    return ret;
 }
 
 extern UniValue abortrescan(const JSONRPCRequest& request); // in rpcdump.cpp

@@ -108,7 +108,7 @@ static UniValue getnetworkhashps(const JSONRPCRequest& request)
 
 UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGenerate, uint64_t nMaxTries, bool keepScript)
 {
-    static const int nInnerLoopCount = 0x1000000;
+    static const int nInnerLoopCount = 0x100000;
     int nHeightEnd = 0;
     int nHeight = 0;
 
@@ -130,12 +130,13 @@ UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGen
             LOCK(cs_main);
             IncrementExtraNonce(pblock, chainActive.Tip(), nExtraNonce);
         }
-        CBlockHeader header = pblock->GetBlockHeader();
-        while (nMaxTries > 0 && header.nNonce < nInnerLoopCount && !CheckProofOfWork(header, nHeight + 1, consensus)) {
-            ++header.nNonce;
-            --nMaxTries;
+        bool fNegative, fOverflow;
+        arith_uint256 bnTarget;
+        bnTarget.SetCompact (pblock->nBits, &fNegative, &fOverflow);
+        while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount && (UintToArith256(pblock->GetPoWHash (nHeight + 1, consensus)) >= bnTarget)) {
+            pblock->nNonce++;
+            nMaxTries--;
         }
-        pblock->nNonce = header.nNonce;
         if (nMaxTries == 0) {
             break;
         }
@@ -176,7 +177,7 @@ static UniValue generatetoaddress(const JSONRPCRequest& request)
         );
 
     int nGenerate = request.params[0].get_int();
-    uint64_t nMaxTries = 1000000;
+    uint64_t nMaxTries = 100000;
     if (!request.params[2].isNull()) {
         nMaxTries = request.params[2].get_int();
     }
@@ -222,8 +223,8 @@ static UniValue getmininginfo(const JSONRPCRequest& request)
     obj.pushKV("currentblockweight", (uint64_t)nLastBlockWeight);
     obj.pushKV("currentblocktx",   (uint64_t)nLastBlockTx);
     UniValue difficulty(UniValue::VOBJ);
-    difficulty.push_back(Pair("proof-of-work",        (double)GetDifficulty()));
-    difficulty.push_back(Pair("proof-of-stake",       (double)GetDifficulty(GetLastBlockIndex(chainActive.Tip(), Params().GetConsensus(), true), false)));
+    difficulty.push_back(Pair("proof-of-work",        (double)GetDifficulty(true, nullptr, true)));
+    difficulty.push_back(Pair("proof-of-stake",       (double)GetDifficulty(true, nullptr, false)));
     difficulty.push_back(Pair("search-interval",      (int)nLastCoinStakeSearchInterval));
     obj.push_back(Pair("difficulty",       difficulty));
     obj.pushKV("networkhashps",    getnetworkhashps(request));

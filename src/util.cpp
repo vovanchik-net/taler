@@ -716,7 +716,7 @@ fs::path GetDefaultDataDir()
     // Unix: ~/.bitcoin
 #ifdef WIN32
     // Windows
-    return GetSpecialFolderPath(CSIDL_APPDATA) / "Taler17";
+    return GetSpecialFolderPath(CSIDL_APPDATA) / "Taler";
 #else
     fs::path pathRet;
     char* pszHome = getenv("HOME");
@@ -726,10 +726,10 @@ fs::path GetDefaultDataDir()
         pathRet = fs::path(pszHome);
 #ifdef MAC_OSX
     // Mac
-    return pathRet / "Library/Application Support/Taler17";
+    return pathRet / "Library/Application Support/Taler";
 #else
     // Unix
-    return pathRet / ".taler17";
+    return pathRet / ".taler";
 #endif
 #endif
 }
@@ -764,7 +764,7 @@ const fs::path &GetBlocksDir(bool fNetSpecific)
     if (fNetSpecific)
         path /= BaseParams().DataDir();
 
-    path /= "blocks";
+    path /= "blocks_db";
     fs::create_directories(path);
     return path;
 }

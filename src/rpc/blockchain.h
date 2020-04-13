@@ -23,7 +23,7 @@ static constexpr int NUM_GETBLOCKSTATS_PERCENTILES = 5;
  * @return A floating point number that is a multiple of the main net minimum
  * difficulty (4295032833 hashes).
  */
-double GetDifficulty(const CBlockIndex* blockindex = nullptr, bool fPowOnly = true);
+double GetDifficulty (bool fLast, const CBlockIndex* blockindex, bool fPow);
 
 /** Callback for when block tip changed. */
 void RPCNotifyBlockChange(bool ibd, const CBlockIndex *);

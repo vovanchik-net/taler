@@ -71,7 +71,6 @@ struct Params {
     bool fPowNoRetargeting;
     int64_t nPowTargetSpacingBegin;
     int64_t nPowTargetTimespan;
-    int64_t DifficultyAdjustmentInterval() const { return nPowTargetTimespan / nPowTargetSpacingBegin; }
     uint256 nMinimumChainWork;
     uint256 defaultAssumeValid;
     
@@ -90,6 +89,7 @@ struct Params {
     int64_t nPosTargetSpacing;
     int64_t nPosTargetTimespan;
     int64_t nStakeModifierInterval;
+    int64_t nCoinAgeTick;
     int64_t nStakeMinAge;
     int64_t nStakeMaxAge;
     uint256 posLimit;
@@ -103,9 +103,7 @@ struct Params {
     int64_t nNewDiffAdjustmentAlgorithmHeight;
 
     int newProofHeight;
-    int newTargetTimespan;
-    int newTargetSpacingPoW;
-    int newTargetSpacingPoS;
+    int newTargetSpacing;
     int newLimitShift;
 };
 } // namespace Consensus
