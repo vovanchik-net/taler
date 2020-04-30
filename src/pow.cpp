@@ -287,6 +287,7 @@ uint32_t GetNextWork (const CBlockIndex *pLast, const Consensus::Params &params,
     int64_t srcTimes = 0;
     int64_t destBlockCount = 24;
     int64_t LastNonBlockCount = 0;
+    if (fProofOfStake) destBlockCount >>= 2;
     for (int i = 0; i < destBlockCount; i++) {
         while (pPrev && (pPrev->IsProofOfStake() != fProofOfStake)) pPrev = pPrev->pprev;
         if (pPrev == nullptr) return bnLimit.GetCompact();
@@ -298,7 +299,7 @@ uint32_t GetNextWork (const CBlockIndex *pLast, const Consensus::Params &params,
     }
     bnNew /= destBlockCount * params.newTargetSpacing;
     bnNew *= srcTimes;
-    while (LastNonBlockCount > 5) { bnNew *= 2; LastNonBlockCount--; if (bnNew > bnLimit) break; }
+    while (LastNonBlockCount > destBlockCount) { bnNew *= 2; LastNonBlockCount--; if (bnNew > bnLimit) break; }
     if (bnNew > bnOld*4) bnNew = bnOld*4;
     if (bnNew < bnOld/4) bnNew = bnOld/4;
     if (bnNew > bnLimit) bnNew = bnLimit;

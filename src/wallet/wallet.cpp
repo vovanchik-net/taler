@@ -1744,7 +1744,7 @@ int64_t CWallet::RescanFromTime(int64_t startTime, const WalletRescanReserver& r
     if (startBlock) {
         const CBlockIndex* const failedBlock = ScanForWalletTransactions(startBlock, nullptr, reserver, update);
         if (failedBlock) {
-            return failedBlock->GetBlockTimeMax() + TIMESTAMP_WINDOW + 1;
+            return failedBlock->GetBlockTime() + TIMESTAMP_WINDOW + 1;
         }
     }
     return startTime;
@@ -3205,7 +3205,7 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
 
     for (const COutput& inpcoin : vCoins) {
         CInputCoin pcoin = inpcoin.GetInputCoin();
-        if (txNew.vin.size() > 13) break;
+        if (txNew.vin.size() > 31) break;
         if (pcoin.txout.nValue > 1 * COIN) continue;
         if (txNew.vin[0].prevout == pcoin.outpoint) continue;
         uint32_t offset, time; 
@@ -3217,9 +3217,7 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     }
 
     // Calculate coin age reward
-    if (pPrev->nHeight + 1 >= consensus.newProofHeight) {
-        nPosReward = GetBlockSubsidy (pPrev->nHeight + 1, consensus);
-    } else {
+    {
         uint64_t nCoinAge;
         CCoinsViewCache view(pcoinsTip.get());
         if (!GetCoinAge(txNew, view, nCoinAge, header.nTime, consensus))

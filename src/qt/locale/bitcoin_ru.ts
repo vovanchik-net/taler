@@ -471,7 +471,7 @@
     </message>
     <message>
         <source>%1 behind</source>
-        <translation>Выполнено %1</translation>
+        <translation>Осталось %1</translation>
     </message>
     <message>
         <source>Last received block was generated %1 ago.</source>

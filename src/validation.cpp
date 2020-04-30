@@ -66,15 +66,6 @@ namespace {
             if (pa->nChainWork > pb->nChainWork) return false;
             if (pa->nChainWork < pb->nChainWork) return true;
 
-            // ... then by earliest time received, ...
-            if (pa->nSequenceId < pb->nSequenceId) return false;
-            if (pa->nSequenceId > pb->nSequenceId) return true;
-
-            // Use pointer address as tie breaker (should only happen with blocks
-            // loaded from disk, as those all have id 0).
-            if (pa < pb) return false;
-            if (pa > pb) return true;
-
             // Identical blocks.
             return false;
         }
@@ -112,18 +103,6 @@ private:
      * missing the data for the block.
      */
     std::set<CBlockIndex*, CBlockIndexWorkComparator> setBlockIndexCandidates;
-
-    /**
-     * Every received block is assigned a unique and increasing identifier, so we
-     * know which one to give priority in case of a fork.
-     */
-    CCriticalSection cs_nBlockSequenceId;
-    /** Blocks loaded from disk are assigned id 0, so start the counter at 1. */
-    int32_t nBlockSequenceId = 1;
-    /** Decreasing counter (used by subsequent preciousblock calls). */
-    int32_t nBlockReverseSequenceId = -1;
-    /** chainwork for the last block that preciousblock has been applied to. */
-    arith_uint256 nLastPreciousChainwork = 0;
 
     /** In order to efficiently track invalidity of headers, we keep the set of
       * blocks which we tried to connect and found to be invalid here (ie which
@@ -1204,9 +1183,6 @@ CAmount GetCoinSupply(int nPowHeight, const Consensus::Params& consensusParams)
 
 CAmount GetBlockSubsidy(int nPowHeight, const Consensus::Params& consensusParams)
 {
-    if (nPowHeight >= consensusParams.newProofHeight) 
-        return ((44 - std::min((nPowHeight - consensusParams.newProofHeight) >> 16, 40)) * COIN) >> 2;
-    
     if (nPowHeight == 1) {
         return CAmount(2333333 * COIN);
     }
@@ -1869,9 +1845,8 @@ bool GetStakeModifier (const CBlockIndex* pindexCurrent, uint64_t& nStakeModifie
         bool fSelected = false;
         arith_uint256 hashBest = 0;
         for (const std::pair<int64_t, uint256>& item : vSortedByTimestamp) {
-            if (!mapBlockIndex.count(item.second))
-                return error("GetStakeModifier: failed to find block index for candidate block %s", item.second.ToString());
-            const CBlockIndex* pi = mapBlockIndex[item.second];
+            const CBlockIndex* pi = LookupBlockIndex(item.second);
+            if (!pi) return error("GetStakeModifier: failed to find block index for candidate block %s", item.second.ToString());
             if (fSelected && pi->GetBlockTime() > nSelectionIntervalStop) break;
             if (mapSelected.count(pi->nHeight) > 0) continue;
 
@@ -2033,9 +2008,9 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
         // This setting doesn't force the selection of any particular chain but makes validating some faster by
         //  effectively caching the result of part of the verification.
-        BlockMap::const_iterator  it = mapBlockIndex.find(hashAssumeValid);
-        if (it != mapBlockIndex.end()) {
-            if (it->second->GetAncestor(pindex->nHeight) == pindex &&
+        const CBlockIndex* pi = LookupBlockIndex(hashAssumeValid);
+        if (pi) {
+            if (pi->GetAncestor(pindex->nHeight) == pindex &&
                 pindexBestHeader->GetAncestor(pindex->nHeight) == pindex &&
                 pindexBestHeader->nChainWork >= nMinimumChainWork) {
                 // This block is a member of the assumed verified chain and an ancestor of the best header.
@@ -2123,9 +2098,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                                      REJECT_INVALID, "bad-txns-coinstake-fee-too-small");
                 }
 
-                if (pindex->nHeight >= consensus.newProofHeight) {
-                    posReward = GetBlockSubsidy (pindex->nHeight, consensus);
-                } else {
+                {
                     uint64_t nCoinAge;
                     if (!GetCoinAge(tx, view, nCoinAge, block.GetBlockTime(), consensus))
                         return error("CheckInputs() : %s unable to get coin age for coinstake", tx.GetHash().ToString());
@@ -2274,7 +2247,8 @@ bool CheckProofOfStake (const CBlockHeader& block, int height, const Consensus::
     bnTarget.SetCompact(block.nBits);
     CDataStream ss(SER_GETHASH, 0);
     if (height >= params.newProofHeight) {
-        bnTarget *= std::min((int)((block.nTime - time) / params.nCoinAgeTick), 33) * std::min((int)(value / COIN), 999);
+        bnTarget *= std::min((int)((block.nTime - time) / params.nCoinAgeTick), 99);
+        bnTarget *= std::min((int)(value / COIN), 9999);
         ss << out.n << block.hashPrevBlock << out.hash << block.nTime << block.nBits << 0; 
     } else {
         int64_t nTimeWeight = std::min((int64_t)block.nTime - time, params.nStakeMaxAge) - params.nStakeMinAge;
@@ -2282,7 +2256,7 @@ bool CheckProofOfStake (const CBlockHeader& block, int height, const Consensus::
         const CBlockIndex* pindex = chainActive.Tip();
         int nStakeModifierHeight = pindex->nHeight;
         int64_t nStakeModifierTime = pindex->GetBlockTime();
-        int64_t nStakeModifierBound = GetStakeModifierSelectionInterval() + time - params.nStakeMinAge;
+        int64_t nStakeModifierBound = GetStakeModifierSelectionInterval() + time - params.nStakeMinAge; // time + 589120 sec
         if (nStakeModifierTime <= nStakeModifierBound) return false;
         while (nStakeModifierTime > nStakeModifierBound) {
             if (!pindex->pprev) return false;
@@ -2975,18 +2949,7 @@ bool CChainState::PreciousBlock(CValidationState& state, const CChainParams& par
             // Nothing to do, this block is not at the tip.
             return true;
         }
-        if (chainActive.Tip()->nChainWork > nLastPreciousChainwork) {
-            // The chain has been extended since the last call, reset the counter.
-            nBlockReverseSequenceId = -1;
-        }
-        nLastPreciousChainwork = chainActive.Tip()->nChainWork;
         setBlockIndexCandidates.erase(pindex);
-        pindex->nSequenceId = nBlockReverseSequenceId;
-        if (nBlockReverseSequenceId > std::numeric_limits<int32_t>::min()) {
-            // We can't keep reducing the counter if somebody really wants to
-            // call preciousblock 2**31-1 times on the same set of tips...
-            nBlockReverseSequenceId--;
-        }
         if (pindex->IsValid(BLOCK_VALID_TRANSACTIONS) && pindex->nChainTx) {
             setBlockIndexCandidates.insert(pindex);
             PruneBlockIndexCandidates();
@@ -3110,22 +3073,20 @@ CBlockIndex* CChainState::AddToBlockIndex(const CBlockHeader& block)
 
     // Check for duplicate
     uint256 hash = block.GetHash();
-    BlockMap::iterator it = mapBlockIndex.find(hash);
-    if (it != mapBlockIndex.end())
-        return it->second;
+    CBlockIndex* pi = LookupBlockIndex(hash);
+    if (pi) return pi;
 
     // Construct new block index object
     CBlockIndex* pindexNew = new CBlockIndex(block);
     // We assign the sequence id to blocks only when the full data is available,
     // to avoid miners withholding blocks but broadcasting headers, to get a
     // competitive advantage.
-    pindexNew->nSequenceId = 0;
     BlockMap::iterator mi = mapBlockIndex.insert(std::make_pair(hash, pindexNew)).first;
     pindexNew->phashBlock = &((*mi).first);
-    BlockMap::iterator miPrev = mapBlockIndex.find(block.hashPrevBlock);
-    if (miPrev != mapBlockIndex.end())
+    CBlockIndex* pprev = LookupBlockIndex(block.hashPrevBlock);
+    if (pprev)
     {
-        pindexNew->pprev = (*miPrev).second;
+        pindexNew->pprev = pprev;
         pindexNew->nHeight = pindexNew->pprev->nHeight + 1;
         pindexNew->nPowHeight = pindexNew->pprev->nPowHeight;
         if (!block.IsProofOfStake()) {
@@ -3134,7 +3095,6 @@ CBlockIndex* CChainState::AddToBlockIndex(const CBlockHeader& block)
         pindexNew->nFlags = block.nFlags;
         pindexNew->BuildSkip();
     }
-    pindexNew->nTimeMax = (pindexNew->pprev ? std::max(pindexNew->pprev->nTimeMax, pindexNew->nTime) : pindexNew->nTime);
     pindexNew->nChainWork = (pindexNew->pprev ? pindexNew->pprev->nChainWork : 0) + GetBlockProof(*pindexNew);
     pindexNew->RaiseValidity(BLOCK_VALID_TREE);
     if (pindexBestHeader == nullptr || pindexBestHeader->nChainWork < pindexNew->nChainWork)
@@ -3170,10 +3130,6 @@ void CChainState::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pi
             CBlockIndex *pindex = queue.front();
             queue.pop_front();
             pindex->nChainTx = (pindex->pprev ? pindex->pprev->nChainTx : 0) + pindex->nTx;
-            {
-                LOCK(cs_nBlockSequenceId);
-                pindex->nSequenceId = nBlockSequenceId++;
-            }
             if (chainActive.Tip() == nullptr || !setBlockIndexCandidates.value_comp()(pindex, chainActive.Tip())) {
                 setBlockIndexCandidates.insert(pindex);
             }
@@ -3574,12 +3530,10 @@ bool CChainState::AcceptBlockHeader(const CBlockHeader& block, CValidationState&
     AssertLockHeld(cs_main);
     // Check for duplicate
     uint256 hash = block.GetHash();
-    BlockMap::iterator miSelf = mapBlockIndex.find(hash);
-    CBlockIndex *pindex = nullptr;
+    CBlockIndex *pindex = LookupBlockIndex(hash);
     if (hash != chainparams.GetConsensus().hashGenesisBlock) {
-        if (miSelf != mapBlockIndex.end()) {
+        if (pindex) {
             // Block header is already known.
-            pindex = miSelf->second;
             if (ppindex)
                 *ppindex = pindex;
             if (pindex->nStatus & BLOCK_FAILED_MASK)
@@ -3588,11 +3542,9 @@ bool CChainState::AcceptBlockHeader(const CBlockHeader& block, CValidationState&
         }
 
         // Get prev block index
-        CBlockIndex* pindexPrev = nullptr;
-        BlockMap::iterator mi = mapBlockIndex.find(block.hashPrevBlock);
-        if (mi == mapBlockIndex.end())
+        CBlockIndex* pindexPrev = LookupBlockIndex(block.hashPrevBlock);
+        if (!pindexPrev)
             return state.DoS(10, error("%s: prev block not found", __func__), 0, "prev-blk-not-found");
-        pindexPrev = (*mi).second;
         if (pindexPrev->nStatus & BLOCK_FAILED_MASK)
             return state.DoS(100, error("%s: prev block invalid", __func__), REJECT_INVALID, "bad-prevblk");
 
@@ -4092,13 +4044,12 @@ CBlockIndex * CChainState::InsertBlockIndex(const uint256& hash)
         return nullptr;
 
     // Return existing
-    BlockMap::iterator mi = mapBlockIndex.find(hash);
-    if (mi != mapBlockIndex.end())
-        return (*mi).second;
+    CBlockIndex* pi = LookupBlockIndex(hash);
+    if (pi) return pi;
 
     // Create new
     CBlockIndex* pindexNew = new CBlockIndex();
-    mi = mapBlockIndex.insert(std::make_pair(hash, pindexNew)).first;
+    BlockMap::iterator mi = mapBlockIndex.insert(std::make_pair(hash, pindexNew)).first;
     pindexNew->phashBlock = &((*mi).first);
 
     return pindexNew;
@@ -4124,7 +4075,6 @@ bool CChainState::LoadBlockIndex(const Consensus::Params& consensus_params, CBlo
     {
         CBlockIndex* pindex = item.second;
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
-        pindex->nTimeMax = (pindex->pprev ? std::max(pindex->pprev->nTimeMax, pindex->nTime) : pindex->nTime);
         // We can link the chain of blocks for which we've received transactions at some point.
         // Pruned nodes may have deleted the block.
         if (pindex->nTx > 0) {
@@ -4390,16 +4340,16 @@ bool CChainState::ReplayBlocks(const CChainParams& params, CCoinsView* view)
     const CBlockIndex* pindexNew;            // New tip during the interrupted flush.
     const CBlockIndex* pindexFork = nullptr; // Latest block common to both the old and the new tip.
 
-    if (mapBlockIndex.count(hashHeads[0]) == 0) {
+    pindexNew = LookupBlockIndex(hashHeads[0]);
+    if (!pindexNew) {
         return error("ReplayBlocks(): reorganization to unknown block requested");
     }
-    pindexNew = mapBlockIndex[hashHeads[0]];
 
     if (!hashHeads[1].IsNull()) { // The old tip is allowed to be 0, indicating it's the first flush.
-        if (mapBlockIndex.count(hashHeads[1]) == 0) {
+        pindexOld = LookupBlockIndex(hashHeads[1]);
+        if (!pindexOld) {
             return error("ReplayBlocks(): reorganization from unknown block requested");
         }
-        pindexOld = mapBlockIndex[hashHeads[1]];
         pindexFork = LastCommonAncestor(pindexOld, pindexNew);
         assert(pindexFork != nullptr);
     }
@@ -4504,7 +4454,6 @@ bool CChainState::RewindBlockIndex(const CChainParams& params)
             // Remove various other things
             pindexIter->nTx = 0;
             pindexIter->nChainTx = 0;
-            pindexIter->nSequenceId = 0;
             // Make sure it gets written.
             setDirtyBlockIndex.insert(pindexIter);
             // Update indexes
@@ -4553,7 +4502,6 @@ bool RewindBlockIndex(const CChainParams& params) {
 }
 
 void CChainState::UnloadBlockIndex() {
-    nBlockSequenceId = 1;
     m_failed_blocks.clear();
     setBlockIndexCandidates.clear();
 }
@@ -4616,7 +4564,7 @@ bool CChainState::LoadGenesisBlock(const CChainParams& chainparams)
     // mapBlockIndex. Note that we can't use chainActive here, since it is
     // set based on the coins db, not the block index db, which is the only
     // thing loaded at this point.
-    if (mapBlockIndex.count(chainparams.GenesisBlock().GetHash()))
+    if (LookupBlockIndex(chainparams.GenesisBlock().GetHash()))
         return true;
 
     try {
@@ -4817,7 +4765,6 @@ void CChainState::CheckBlockIndex(const Consensus::Params& consensusParams)
             assert(pindex->GetBlockHash() == consensusParams.hashGenesisBlock); // Genesis block's hash must match.
             assert(pindex == chainActive.Genesis()); // The current active chain's genesis block must be this block.
         }
-        if (pindex->nChainTx == 0) assert(pindex->nSequenceId <= 0);  // nSequenceId can't be set positive for blocks that aren't linked (negative is used for preciousblock)
         // VALID_TRANSACTIONS is equivalent to nTx > 0 for all nodes (whether or not pruning has occurred).
         // HAVE_DATA is only equivalent to nTx > 0 (or VALID_TRANSACTIONS) if no pruning has occurred.
         if (!fHavePruned) {
@@ -4835,7 +4782,6 @@ void CChainState::CheckBlockIndex(const Consensus::Params& consensusParams)
         assert((pindexFirstNotTransactionsValid != nullptr) == (pindex->nChainTx == 0));
         assert(pindex->nHeight == nHeight); // nHeight must be consistent.
         assert(pindex->pprev == nullptr || pindex->nChainWork >= pindex->pprev->nChainWork); // For every block except the genesis block, the chainwork must be larger than the parent's.
-        assert(nHeight < 2 || (pindex->pskip && (pindex->pskip->nHeight < nHeight))); // The pskip pointer must point back for all but the first 2 blocks.
         assert(pindexFirstNotTreeValid == nullptr); // All mapBlockIndex entries must at least be TREE valid
         if ((pindex->nStatus & BLOCK_VALID_MASK) >= BLOCK_VALID_TREE) assert(pindexFirstNotTreeValid == nullptr); // TREE valid implies all parents are TREE valid
         if ((pindex->nStatus & BLOCK_VALID_MASK) >= BLOCK_VALID_CHAIN) assert(pindexFirstNotChainValid == nullptr); // CHAIN valid implies all parents are CHAIN valid
@@ -5090,18 +5036,12 @@ bool DumpMempool(void)
 double GuessVerificationProgress(const ChainTxData& data, const CBlockIndex *pindex) {
     if (pindex == nullptr)
         return 0.0;
-
-    int64_t nNow = time(nullptr);
-
-    double fTxTotal;
-
-    if (pindex->nChainTx <= data.nTxCount) {
-        fTxTotal = data.nTxCount + (nNow - data.nTime) * data.dTxRate;
-    } else {
-        fTxTotal = pindex->nChainTx + (nNow - pindex->GetBlockTime()) * data.dTxRate;
-    }
-
-    return pindex->nChainTx / fTxTotal;
+    CBlockIndex* block0 = chainActive.Genesis();
+    if (block0 == nullptr)
+        return 0.0;
+    double t1 = pindex->GetBlockTime() - block0->GetBlockTime();
+    double t2 = time(nullptr) - block0->GetBlockTime();
+    return (t2 == 0) ? 0.0 : t1 / t2;
 }
 
 class CMainCleanup

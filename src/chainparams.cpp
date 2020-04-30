@@ -137,7 +137,7 @@ public:
         bech32_hrp = "tlr";
 
         vFixedSeeds.clear();
-        //vFixedSeeds = std::vector<SeedSpec6>(pnSeed6_main, pnSeed6_main + ARRAYLEN(pnSeed6_main));
+        vFixedSeeds = std::vector<SeedSpec6>(pnSeed6_main, pnSeed6_main + ARRAYLEN(pnSeed6_main));
 
         fDefaultConsistencyChecks = false;
         fRequireStandard = true;
@@ -146,15 +146,13 @@ public:
         checkpointData = {
             {
                 {2048, uint256S("0xc4838cab89b16915d813f424198a999af82b3dce2afed5d82cab1fe9df08d701")},
-                {6602, uint256S("0xf225e2f57a5e90539a4d74b3bf1ed906a8146c64addff0f5279473fb6c5e9f0e")},
                 {20000, uint256S("0x82ad64f451be0375683efbdc7d94c1b970431b02a6a3e5057dd6cd0fb2022e70")},
-                {70000, uint256S("0x8c25e55d05da7fd4e61383fcdd1232e8c8ddd85b220caefc10ac6c71bdf35b3e")},
                 {100000, uint256S("0xa6c3e93e8ac7b4af077a78c6ce27a1b2b8b7793a7737403bcb9e6f420a928547")},
-                {145000, uint256S("0x01b12183eef6102c765d1f37ea2129e91649f849fd2b18239e7d2f7276927930")},
+                {250000, uint256S("0xe599ff322e9e285b524f2bcd7617a4a0a1b4a8d4d0f5279ce9c706d1ca3036b7")},
                 {500000, uint256S("0xdbd781e1a5c96e38c6f37e85ddc79f808696ff38a107334b1d2aa0d1f3c54886")},
                 {728634, uint256S("0x33e82f201a0b4074af53080d26c4092e6284bdead512b8c189b9c53526078d77")},
                 {734864, uint256S("0x11367f424327987636e48a1d8d81b34d92c397a48171a53ead697ac3037ec6f3")},
-                {750000, uint256S("0x45e49f1d72c78eccd0ec43997bd1ecd8a151c52b794dd80b31911d0deb7e0c9b")},
+                {900000, uint256S("0x5c10c1e2f0c8ad01484ba89e5874c21e4142c4044da8d635db191f07eb4221bf")},
             }
         };
 
@@ -196,7 +194,7 @@ public:
         consensus.nPosTargetTimespan = 14 * 24 * 60 * 60;       // two weeks
         consensus.nPosTargetSpacing = 60 * 7 / 3;
         consensus.nCoinAgeTick = 60 * 60;
-        consensus.nStakeMinAge = 60 * 60 * 3;                   // minimum age for coin age  
+        consensus.nStakeMinAge = 60 * 60 * 2;                   // minimum age for coin age  
         consensus.nStakeMaxAge = 60 * 60 * 24 * 3;              // stake age of full weight
         consensus.nStakeModifierInterval = 6 * 60;              // time to elapse before new modifier is computed
         consensus.posLimit = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");

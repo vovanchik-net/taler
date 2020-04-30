@@ -218,12 +218,6 @@ public:
     uint32_t nBits;
     uint32_t nNonce;
 
-    //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
-    int32_t nSequenceId;
-
-    //! (memory only) Maximum nTime in the chain up to and including this block.
-    unsigned int nTimeMax;
-
     //pos
     uint32_t nFlags; // block index flags
     uint64_t nStakeModifier; // hash modifier for proof-of-stake
@@ -275,8 +269,6 @@ public:
         nTx = 0;
         nChainTx = 0;
         nStatus = 0;
-        nSequenceId = 0;
-        nTimeMax = 0;
 
         nVersion       = 0;
         hashMerkleRoot = uint256();
@@ -346,11 +338,6 @@ public:
     int64_t GetBlockTime() const
     {
         return (int64_t)nTime;
-    }
-
-    int64_t GetBlockTimeMax() const
-    {
-        return (int64_t)nTimeMax;
     }
 
     static constexpr int nMedianTimeSpan = 11;
