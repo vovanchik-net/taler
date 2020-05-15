@@ -8,6 +8,7 @@
 #define BITCOIN_CONSENSUS_PARAMS_H
 
 #include <uint256.h>
+#include <arith_uint256.h>
 #include <limits>
 #include <map>
 #include <string>
@@ -66,7 +67,7 @@ struct Params {
     uint32_t nMinerConfirmationWindow;
     BIP9Deployment vDeployments[MAX_VERSION_BITS_DEPLOYMENTS];
     /** Proof of work parameters */
-    uint256 powLimit;
+    arith_uint256 powLimit;
     bool fPowAllowMinDifficultyBlocks;
     bool fPowNoRetargeting;
     int64_t nPowTargetSpacingBegin;
@@ -78,7 +79,7 @@ struct Params {
     int nSegwitHeight;
     int TLRHeight;
     int TLRInitLim;
-    uint256 powLimitLegacy;
+    arith_uint256 powLimitLegacy;
     int64_t nPowTargetSpacing (int nHeight) const {
         return nHeight >= TLRHeight ? (nPowTargetSpacingBegin / 5) : nPowTargetSpacingBegin;
     }
@@ -92,7 +93,7 @@ struct Params {
     int64_t nCoinAgeTick;
     int64_t nStakeMinAge;
     int64_t nStakeMaxAge;
-    uint256 posLimit;
+    arith_uint256 posLimit;
     int64_t DifficultyAdjustmentIntervalPos() const {
         return nPosTargetTimespan / nPosTargetSpacing;
     }
@@ -104,8 +105,8 @@ struct Params {
 
     int newProofHeight;
     int newTargetSpacing;
-    int newLimitShift;
 };
+
 } // namespace Consensus
 
 #endif // BITCOIN_CONSENSUS_PARAMS_H

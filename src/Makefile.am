@@ -308,15 +308,8 @@ crypto_libbitcoin_crypto_base_a_SOURCES = \
   crypto/sha512.h \
   crypto/scrypt.cpp \
   crypto/scrypt.h \  
-  crypto/Lyra2Z/Lyra2.h \
-  crypto/Lyra2Z/Lyra2.c \
-  crypto/Lyra2Z/Lyra2Z.h \
-  crypto/Lyra2Z/Lyra2Z.c \
-  crypto/Lyra2Z/blake.c \
-  crypto/Lyra2Z/sph_blake.h \
-  crypto/Lyra2Z/sph_types.h \
-  crypto/Lyra2Z/Sponge.c \
-  crypto/Lyra2Z/Sponge.h
+  crypto/Lyra2Z.c \
+  crypto/Lyra2Z.h
 
 if USE_ASM
 crypto_libbitcoin_crypto_base_a_SOURCES += crypto/sha256_sse4.cpp

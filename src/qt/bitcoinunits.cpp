@@ -20,8 +20,8 @@ QList<BitcoinUnits::Unit> BitcoinUnits::availableUnits()
     QList<BitcoinUnits::Unit> unitlist;
     unitlist.append(BTC);
     unitlist.append(mBTC);
-    unitlist.append(uBTC);
-    unitlist.append(SAT);
+//    unitlist.append(uBTC);
+//    unitlist.append(SAT);
     return unitlist;
 }
 
@@ -31,8 +31,8 @@ bool BitcoinUnits::valid(int unit)
     {
     case BTC:
     case mBTC:
-    case uBTC:
-    case SAT:
+//    case uBTC:
+//    case SAT:
         return true;
     default:
         return false;
@@ -44,9 +44,9 @@ QString BitcoinUnits::longName(int unit)
     switch(unit)
     {
     case BTC: return QString("Taler");
-    case mBTC: return QString("mTaler");
-    case uBTC: return QString::fromUtf8("nTaler");
-    case SAT: return QString("pTaler");
+    case mBTC: return QString("miniTaler");
+//    case uBTC: return QString::fromUtf8("nanoTaler");
+//    case SAT: return QString("pTaler");
     default: return QString("???");
     }
 }
@@ -67,8 +67,8 @@ QString BitcoinUnits::description(int unit)
     {
     case BTC: return QString("Taler");
     case mBTC: return QString("Milli-Taler (1 / 1" THIN_SP_UTF8 "000)");
-    case uBTC: return QString("Nano-Taler (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
-    case SAT: return QString("Pico Taler (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+//    case uBTC: return QString("Nano-Taler (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+//    case SAT: return QString("Pico Taler (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
     default: return QString("???");
     }
 }
@@ -79,8 +79,8 @@ qint64 BitcoinUnits::factor(int unit)
     {
     case BTC: return 100000000;
     case mBTC: return 100000;
-    case uBTC: return 100;
-    case SAT: return 1;
+//    case uBTC: return 100;
+//    case SAT: return 1;
     default: return 100000000;
     }
 }
@@ -91,8 +91,8 @@ int BitcoinUnits::decimals(int unit)
     {
     case BTC: return 8;
     case mBTC: return 5;
-    case uBTC: return 2;
-    case SAT: return 0;
+//    case uBTC: return 2;
+//    case SAT: return 0;
     default: return 0;
     }
 }

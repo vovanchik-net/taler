@@ -13,7 +13,7 @@
 #include <chainparams.h>
 
 #include <crypto/scrypt.h>
-#include <crypto/Lyra2Z/Lyra2Z.h>
+#include <crypto/Lyra2Z.h>
 
 uint256 CBlockHeader::GetPoWHash(int nHeight, const Consensus::Params& params) const {
     uint256 thash;

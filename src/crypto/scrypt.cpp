@@ -27,12 +27,14 @@
  * online backup system.
  */
 
-#include "crypto/scrypt.h"
-//#include "util.h"
+#include <crypto/scrypt.h>
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <openssl/sha.h>
+
+#include <crypto/scrypt-sse2.cpp>
 
 #if defined(USE_SSE2) && !defined(USE_SSE2_ALWAYS)
 #ifdef _MSC_VER
@@ -312,7 +314,7 @@ std::string scrypt_detect_sse2()
     if (cpuid_edx & 1<<26)
     {
         scrypt_1024_1_1_256_sp_detected = &scrypt_1024_1_1_256_sp_sse2;
-        ret = "scrypt: using scrypt-sse2 as detected");
+        ret = "scrypt: using scrypt-sse2 as detected";
     }
     else
     {

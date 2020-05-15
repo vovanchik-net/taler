@@ -5,6 +5,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chain.h>
+#include <validation.h>
+#include <util.h>
 
 /**
  * CChain implementation
@@ -62,9 +64,15 @@ const CBlockIndex *CChain::FindFork(const CBlockIndex *pindex) const {
 
 CBlockIndex* CChain::FindEarliestAtLeast(int64_t nTime) const
 {
-    std::vector<CBlockIndex*>::const_iterator lower = std::lower_bound(vChain.begin(), vChain.end(), nTime,
-        [](CBlockIndex* pBlock, const int64_t& time) -> bool { return pBlock->GetBlockTime() < time; });
-    return (lower == vChain.end() ? nullptr : *lower);
+    if ((Genesis() == nullptr) || (Genesis()->GetBlockTime() > nTime)) return nullptr;
+    if (Tip()->GetBlockTime() < nTime) return nullptr;
+    int loHeight = 0;
+    int hiHeight = Height();
+    while (loHeight < hiHeight) {
+        int mHeight = (loHeight + hiHeight) / 2;
+        if (vChain[mHeight]->GetBlockTime() < nTime) { loHeight = mHeight; } else { hiHeight = mHeight; }
+    }
+    return vChain[hiHeight];
 }
 
 /** Turn the lowest '1' bit in the binary representation of a number into a '0'. */

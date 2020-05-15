@@ -3166,6 +3166,7 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     static std::map<uint256, uint64_t> cachedCoins; 
     CReserveKey key0(this);
     for (const COutput& inpcoin : vCoins) {
+        if (!inpcoin.fSpendable) continue;
         CInputCoin pcoin = inpcoin.GetInputCoin(); 
         if (pcoin.txout.nValue < 1 * COIN) continue;
 
@@ -3204,6 +3205,7 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     if (nCredit == 0) return false;
 
     for (const COutput& inpcoin : vCoins) {
+        if (!inpcoin.fSpendable) continue;
         CInputCoin pcoin = inpcoin.GetInputCoin();
         if (txNew.vin.size() > 31) break;
         if (pcoin.txout.nValue > 1 * COIN) continue;
@@ -3217,7 +3219,9 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     }
 
     // Calculate coin age reward
-    {
+    if (pPrev->nHeight + 1 >= consensus.newProofHeight) {
+        nPosReward = GetBlockSubsidy (pPrev->nHeight + 1, consensus);
+    } else {
         uint64_t nCoinAge;
         CCoinsViewCache view(pcoinsTip.get());
         if (!GetCoinAge(txNew, view, nCoinAge, header.nTime, consensus))
@@ -4292,9 +4296,9 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(const WalletLocation& loc
         int nMaxVersion = gArgs.GetArg("-upgradewallet", 0);
         if (nMaxVersion == 0) // the -upgradewallet without argument case
         {
-            walletInstance->WalletLogPrintf("Performing wallet upgrade to %i\n", FEATURE_LATEST);
-            nMaxVersion = FEATURE_LATEST;
-            walletInstance->SetMinVersion(FEATURE_LATEST); // permanently upgrade the wallet immediately
+            walletInstance->WalletLogPrintf("Performing wallet upgrade to %i\n", FEATURE_HD);
+            nMaxVersion = FEATURE_HD;
+            walletInstance->SetMinVersion(FEATURE_HD); // permanently upgrade the wallet immediately
         }
         else
             walletInstance->WalletLogPrintf("Allowing wallet upgrade up to %i\n", nMaxVersion);
@@ -4354,7 +4358,7 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(const WalletLocation& loc
             InitError(strprintf(_("Error creating %s: You can't create non-HD wallets with this version."), walletFile));
             return nullptr;
         }
-        walletInstance->SetMinVersion(FEATURE_LATEST);
+        walletInstance->SetMinVersion(FEATURE_HD);
 
         if ((wallet_creation_flags & WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
             //selective allow to set flags

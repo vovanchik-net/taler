@@ -223,8 +223,8 @@ static UniValue getmininginfo(const JSONRPCRequest& request)
     obj.pushKV("currentblockweight", (uint64_t)nLastBlockWeight);
     obj.pushKV("currentblocktx",   (uint64_t)nLastBlockTx);
     UniValue difficulty(UniValue::VOBJ);
-    difficulty.push_back(Pair("proof-of-work",        (double)GetDifficulty(true, nullptr, true)));
-    difficulty.push_back(Pair("proof-of-stake",       (double)GetDifficulty(true, nullptr, false)));
+    difficulty.push_back(Pair("proof-of-work",        (double)GetDifficulty(false)));
+    difficulty.push_back(Pair("proof-of-stake",       (double)GetDifficulty(true)));
     difficulty.push_back(Pair("search-interval",      (int)nLastCoinStakeSearchInterval));
     obj.push_back(Pair("difficulty",       difficulty));
     obj.pushKV("networkhashps",    getnetworkhashps(request));

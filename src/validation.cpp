@@ -1183,6 +1183,9 @@ CAmount GetCoinSupply(int nPowHeight, const Consensus::Params& consensusParams)
 
 CAmount GetBlockSubsidy(int nPowHeight, const Consensus::Params& consensusParams)
 {
+    if (nPowHeight >= consensusParams.newProofHeight) 
+        return ((4 - std::min((nPowHeight - consensusParams.newProofHeight) >> 20, 3)) * COIN);
+
     if (nPowHeight == 1) {
         return CAmount(2333333 * COIN);
     }
@@ -1742,15 +1745,6 @@ void ThreadScriptCheck() {
     scriptcheckqueue.Thread();
 }
 
-int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params)
-{
-    LOCK(cs_main);
-    int32_t nVersion = VERSIONBITS_TOP_BITS;
-    if (pindexPrev->nHeight >= params.CSVHeight) nVersion |= 1;
-    if (pindexPrev->nHeight >= params.WitnessHeight) nVersion |= 2;
-    return nVersion;
-}
-
 static unsigned int GetBlockScriptFlags(const CBlockIndex* pindex, const Consensus::Params& consensusparams) {
     AssertLockHeld(cs_main);
 
@@ -2098,7 +2092,9 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                                      REJECT_INVALID, "bad-txns-coinstake-fee-too-small");
                 }
 
-                {
+                if (pindex->nHeight >= consensus.newProofHeight) {
+                    posReward = GetBlockSubsidy (pindex->nHeight, consensus);
+                } else {
                     uint64_t nCoinAge;
                     if (!GetCoinAge(tx, view, nCoinAge, block.GetBlockTime(), consensus))
                         return error("CheckInputs() : %s unable to get coin age for coinstake", tx.GetHash().ToString());
@@ -2151,20 +2147,25 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
 
+    CAmount blockReward = nFees;
     if (block.IsProofOfWork()) {
-        CAmount blockReward = nFees + GetBlockSubsidy(pindex->nPowHeight, chainparams.GetConsensus());
-        if (block.vtx[0]->GetValueOut() > blockReward) {
-            return state.DoS(100,
-                error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d) pindex->nPowHeight=%i",
-                block.vtx[0]->GetValueOut(), blockReward, pindex->nPowHeight), 
-                REJECT_INVALID, "bad-cb-amount");
+        if (pindex->nHeight >= consensus.newProofHeight) {
+            blockReward += GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
+        } else {
+            blockReward += GetBlockSubsidy(pindex->nPowHeight, chainparams.GetConsensus());
         }
-    } else {
-        if (block.vtx[0]->GetValueOut() > nFees + posReward)
-            return state.DoS(100, error("ConnectBlock() : coinstake pays too much (actual=%d vs limit=%d)",
-                block.vtx[0]->GetValueOut(), nFees + posReward), 
-                REJECT_INVALID, "bad-cs-amount");
-    }
+    } else { blockReward += posReward; }
+    if (block.vtx[0]->GetValueOut() > blockReward)
+        return state.DoS(100, error("ConnectBlock() : coinstake pays too much (actual=%d vs limit=%d)",
+            block.vtx[0]->GetValueOut(), blockReward), REJECT_INVALID, "bad-cs-amount");
+    if (block.vtx[0]->GetValueOut() < blockReward) {
+        if (pindex->nHeight >= consensus.newProofHeight) {
+            return state.DoS(100, error("ConnectBlock() : coinstake lost pays too much (actual=%d vs limit=%d)",
+                block.vtx[0]->GetValueOut(), blockReward), REJECT_INVALID, "bad-cs-amount");
+        } else {
+            LogPrintf("WARNING:Lost money %d in block %d\n", blockReward - block.vtx[0]->GetValueOut(), pindex->nHeight);
+        }
+    }        
 
     if (!control.Wait())
         return state.DoS(100, error("%s: CheckQueue failed", __func__), REJECT_INVALID, "block-validation-failed");
@@ -2281,11 +2282,11 @@ bool CheckProofOfWork (const CBlockHeader& block, int height, const Consensus::P
     bool fNegative;
     bool fOverflow;
     arith_uint256 bnTarget;
-    const uint256 &powLimit = height < params.nLyra2ZHeight ? params.powLimitLegacy : params.powLimit;
+    const arith_uint256& powLimit = height < params.nLyra2ZHeight ? params.powLimitLegacy : params.powLimit;
     bnTarget.SetCompact (block.nBits, &fNegative, &fOverflow);
 
     // Check range
-    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(powLimit))
+    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > powLimit)
         return false;
     
     uint256 hash = block.GetPoWHash (height, params);

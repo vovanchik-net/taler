@@ -4750,7 +4750,7 @@ UniValue walletcreatefundedpsbt(const JSONRPCRequest& request)
 
 // minting
 
-const int DAY = 24 * 60 * 60;
+static int DAY = 24 * 60 * 60;
 
 double CalcMintingProbability(uint32_t nBits, int timeOffset, CAmount nValue, int64_t nTime) {
     int64_t nTimeWeight = std::min((GetAdjustedTime() - nTime) + timeOffset, Params().GetConsensus().nStakeMaxAge) - Params().GetConsensus().nStakeMinAge;
@@ -4832,10 +4832,11 @@ UniValue listminting(const JSONRPCRequest& request) {
         nMaxWeight = maxWeight;
     }
 
+    DAY = Params().GetConsensus().nCoinAgeTick;
+
     LOCK2(cs_main, pwallet->cs_wallet);
     const CBlockIndex *p = GetLastBlockIndex(chainActive.Tip(), Params().GetConsensus(), true);
-    uint32_t nBits = (p == nullptr) ? UintToArith256(Params().GetConsensus().posLimit).GetCompact() : p->nBits;
-
+    uint32_t nBits = (p == nullptr) ? Params().GetConsensus().posLimit.GetCompact() : p->nBits;
     UniValue ret(UniValue::VARR);
 
     int64_t minAge = Params().GetConsensus().nStakeMinAge / DAY;
@@ -4931,24 +4932,43 @@ UniValue getgenerate (const JSONRPCRequest& request) {
     return result;
 }
 
-UniValue setgenerate (const JSONRPCRequest& request) {
-    if (request.fHelp || (request.params.size() != 1)) {
+UniValue setgeneratepow (const JSONRPCRequest& request) {
+    if (request.fHelp || (request.params.size() != 1))
         throw std::runtime_error(
-            "setgenerate count\n"
-            "See the getgenerate call for the current setting.\n"
+            "setgeneratepow count\n"
+            "1. count          (numeric) The number of generation thread(0 - 63)\n"
             "\nExamples:\n"
-            "\nSet the generation on with a limit of one processor\n" + HelpExampleCli("setgenerate", "1") +
+            "\nSet the generation on with a limit of one processor\n" + HelpExampleCli("setgeneratepow", "1") +
             "\nCheck the setting\n" + HelpExampleCli("getgenerate", "") +
-            "\nTurn off generation\n" + HelpExampleCli("setgenerate", "-1") +
-            "\nUsing json rpc\n" + HelpExampleRpc("setgenerate", "1")
-        );
-    }
+            "\nTurn off generation\n" + HelpExampleCli("setgeneratepow", "0") +
+            "\nUsing json rpc\n" + HelpExampleRpc("setgeneratepow", "1"));
     uint32_t cnt = 0;
     UniValue ret(UniValue::VOBJ);
     if (!toInt32 (request, 0, cnt, ret)) return ret;
     ret.pushKV ("minerPOWRequest", (cnt > 0) ? (int)cnt : 0);
-    ret.pushKV ("minerPOSRequest", (cnt == 0) ? 1 : 0);
+    ret.pushKV ("minerPOSRequest", 0);
     int n = generateCoin (cnt);
+    ret.pushKV ("minerPOWCount", (n > 0) ? n : 0);
+    ret.pushKV ("minerPOSCount", (n == 0) ? 1 : 0);
+    return ret;
+}
+
+UniValue setgeneratepos (const JSONRPCRequest& request) {
+    if (request.fHelp || (request.params.size() != 1))
+        throw std::runtime_error(
+            "setgeneratepos count\n"
+            "See the getgenerate call for the current setting.\n"
+            "\nExamples:\n"
+            "\nSet the generation on with a limit of one processor\n" + HelpExampleCli("setgeneratepos", "1") +
+            "\nCheck the setting\n" + HelpExampleCli("getgenerate", "") +
+            "\nTurn off generation\n" + HelpExampleCli("setgeneratepos", "0") +
+            "\nUsing json rpc\n" + HelpExampleRpc("setgeneratepos", "1"));
+	uint32_t cnt = 0;
+    UniValue ret(UniValue::VOBJ);
+    if (!toInt32 (request, 0, cnt, ret)) return ret;
+    ret.pushKV ("minerPOWRequest", 0);
+    ret.pushKV ("minerPOSRequest", (cnt > 0) ? 1 : 0);
+    int n = generateCoin ((cnt > 0) ? 0 : -1);
     ret.pushKV ("minerPOWCount", (n > 0) ? n : 0);
     ret.pushKV ("minerPOSCount", (n == 0) ? 1 : 0);
     return ret;
@@ -5040,7 +5060,8 @@ static const CRPCCommand commands[] =
 
     { "minting",            "listminting",                      &listminting,                   {"count", "skip", "minweight", "maxweight"} },
 
-    { "generating",         "setgenerate",                      &setgenerate,                   {"proclimit"} },
+    { "generating",         "setgeneratepow",                   &setgeneratepow,                {"proclimit, algo"} },
+    { "generating",         "setgeneratepos",                   &setgeneratepos,                {"proclimit"} },
     { "generating",         "getgenerate",                      &getgenerate,                   {} },	 	      
     { "generating",         "generate",                         &generate,                      {"nblocks","maxtries"} },
 };

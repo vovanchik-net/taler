@@ -60,34 +60,23 @@ static CUpdatedBlock latestblock;
 
 /* Calculate the difficulty for a given block index.
  */
-double GetDifficulty (bool fLast, const CBlockIndex* blockindex, bool fPow)
-{
-    if (fLast) blockindex = chainActive.Tip();
-    if (blockindex == nullptr)
-    {
-        return 1.0;
-    }
-    if (fLast) {
-        while (blockindex->pprev && (blockindex->IsProofOfStake() == fPow)) {
-            blockindex = blockindex->pprev;
-        }
-    }
 
+double GetDifficulty (bool isPoS, const CBlockIndex* blockindex) {
+    if (!blockindex) {
+        blockindex = chainActive.Tip();
+        while (blockindex && (blockindex->IsProofOfStake() != isPoS)) blockindex = blockindex->pprev;
+        if (!blockindex) return 1.0;
+    }
     int nShift = (blockindex->nBits >> 24) & 0xff;
-    double dDiff =
-        (double)0x0000ffff / (double)(blockindex->nBits & 0x00ffffff);
-
-    while (nShift < 29)
-    {
+    double dDiff = (double)0x0000ffff / (double)(blockindex->nBits & 0x00ffffff);
+    while (nShift < 29) {
         dDiff *= 256.0;
         nShift++;
     }
-    while (nShift > 29)
-    {
+    while (nShift > 29) {
         dDiff /= 256.0;
         nShift--;
     }
-
     return dDiff;
 }
 
@@ -109,7 +98,7 @@ UniValue blockheaderToJSON(const CBlockIndex* blockindex)
     result.pushKV("mediantime", (int64_t)blockindex->GetMedianTimePast());
     result.pushKV("nonce", (uint64_t)blockindex->nNonce);
     result.pushKV("bits", strprintf("%08x", blockindex->nBits));
-    result.pushKV("difficulty", GetDifficulty(false, blockindex, false));
+    result.pushKV("difficulty", GetDifficulty(false, blockindex));
     result.pushKV("chainwork", blockindex->nChainWork.GetHex());
     result.pushKV("nTx", (uint64_t)blockindex->nTx);
 
@@ -158,7 +147,7 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
     result.pushKV("mediantime", (int64_t)blockindex->GetMedianTimePast());
     result.pushKV("nonce", (uint64_t)block.nNonce);
     result.pushKV("bits", strprintf("%08x", block.nBits));
-    result.pushKV("difficulty", GetDifficulty(false, blockindex, false));
+    result.push_back(Pair("difficulty", GetDifficulty(false, blockindex)));
     result.pushKV("chainwork", blockindex->nChainWork.GetHex());
     result.pushKV("nTx", (uint64_t)blockindex->nTx);
 
@@ -169,7 +158,7 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
         result.pushKV("nextblockhash", pnext->GetBlockHash().GetHex());
 
     result.push_back(Pair("flags", strprintf("%s%s", blockindex->IsProofOfStake()? "proof-of-stake" : "proof-of-work", blockindex->GeneratedStakeModifier()? " stake-modifier": "")));
-    result.push_back(Pair("proofhash", blockindex->IsProofOfStake()? blockindex->hashProofOfStake.GetHex() : blockindex->GetBlockHash().GetHex()));
+    result.push_back(Pair("proofhash", blockindex->IsProofOfStake() ? blockindex->hashProofOfStake.GetHex() : blockindex->GetBlockHeader().GetPoWHash(blockindex->nHeight, Params().GetConsensus()).GetHex()));
     result.push_back(Pair("entropybit", (int)blockindex->GetStakeEntropyBit()));
     result.push_back(Pair("modifier", strprintf("%016llx", blockindex->nStakeModifier)));
     return result;
@@ -371,8 +360,8 @@ static UniValue getdifficulty(const JSONRPCRequest& request)
 
     LOCK(cs_main);
     UniValue obj(UniValue::VOBJ);
-    obj.push_back(Pair("proof-of-work",        (double)GetDifficulty(true, nullptr, true)));
-    obj.push_back(Pair("proof-of-stake",       (double)GetDifficulty(true, nullptr, false)));
+    obj.push_back(Pair("proof-of-work",        GetDifficulty(false)));
+    obj.push_back(Pair("proof-of-stake",       GetDifficulty(true)));
     obj.push_back(Pair("search-interval",      (int)nLastCoinStakeSearchInterval));
     return obj;
 }
@@ -1208,8 +1197,8 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
     obj.pushKV("headers",               pindexBestHeader ? pindexBestHeader->nHeight : -1);
     obj.pushKV("bestblockhash",         chainActive.Tip()->GetBlockHash().GetHex());
     UniValue difficulty(UniValue::VOBJ);
-    difficulty.push_back(Pair("proof-of-work",  (double)GetDifficulty(true, nullptr, true)));
-    difficulty.push_back(Pair("proof-of-stake", (double)GetDifficulty(true, nullptr, false)));
+    difficulty.push_back(Pair("proof-of-work",  GetDifficulty(false)));
+    difficulty.push_back(Pair("proof-of-stake", GetDifficulty(true)));
     obj.push_back(Pair("difficulty",            difficulty));
     obj.pushKV("mediantime",            (int64_t)chainActive.Tip()->GetMedianTimePast());
     obj.pushKV("verificationprogress",  GuessVerificationProgress(Params().TxData(), chainActive.Tip()));
@@ -2282,6 +2271,7 @@ UniValue dumpblock (const JSONRPCRequest& request) {
     if (!toInt32 (request, 0, startblock, ret)) return ret;
     if (!toInt32 (request, 1, numblock, ret)) return ret;
     if (!toInt32 (request, 2, ext, ret)) return ret;
+    
     uint32_t n = chainActive.Height(), m = 0;
 	if (startblock > n) { if (numblock < n) { m = n - numblock; } } 
 				else	{ if (numblock < (n - startblock)) 	{ m = startblock; n = m + numblock; } else 
@@ -2449,8 +2439,8 @@ UniValue dumpdiff (const JSONRPCRequest& request) {
             + HelpExampleCli("dumpdiff", "")
         );
 
-    int64_t powcnt = 24;
-    int64_t poscnt = 24;
+    int64_t powcnt = 12;
+    int64_t poscnt = 12;
     int64_t needpow = Params().GetConsensus().newTargetSpacing * powcnt;
     int64_t needpos = Params().GetConsensus().newTargetSpacing * poscnt;
     if (Params().NetworkIDString() == "main") {
@@ -2481,11 +2471,11 @@ UniValue dumpdiff (const JSONRPCRequest& request) {
         }
         if (fProofOfStake) {
             logWrite (strprintf("chainPOS = %7d, diff = %10.6f, Actual = %7d, Target = %7d, Speed = %4d%%, time = %s", 
-                i, GetDifficulty(false, pblockindex, false), actt, needt, ((actt != 0) ? (needt * 100) / actt : -1), 
+                i, GetDifficulty(false, pblockindex), actt, needt, ((actt != 0) ? (needt * 100) / actt : -1), 
                 FormatISO8601DateTime(pblockindex->GetBlockTime())));
         } else {
             logWrite (strprintf("chainPOW = %7d, diff = %10.6f, Actual = %7d, Target = %7d, Speed = %4d%%, time = %s", 
-                i, GetDifficulty(false, pblockindex, false), actt, needt, ((actt != 0) ? (needt * 100) / actt : -1), 
+                i, GetDifficulty(false, pblockindex), actt, needt, ((actt != 0) ? (needt * 100) / actt : -1), 
                 FormatISO8601DateTime(pblockindex->GetBlockTime())));
         }
     }

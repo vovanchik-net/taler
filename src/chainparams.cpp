@@ -67,21 +67,19 @@ public:
         consensus.CSVHeight = 32256;
         consensus.WitnessHeight = 32256;
 
-        consensus.powLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.powLimitLegacy = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit = (~arith_uint256 (0)) >> 8;
+        consensus.powLimitLegacy = (~arith_uint256 (0)) >> 20;
         consensus.nPowTargetTimespan = 10 * 60;
         consensus.nPowTargetSpacingBegin = 5 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
-        consensus.nRuleChangeActivationThreshold = 6048;
-        consensus.nMinerConfirmationWindow = 8064;
         consensus.nPosTargetTimespan = 14 * 24 * 60 * 60;       // two weeks
         consensus.nPosTargetSpacing = 60 * 7 / 3;
         consensus.nCoinAgeTick = 60 * 60 * 24;
         consensus.nStakeMinAge = 60 * 60 * 24 * 2;              // minimum age for coin age  
         consensus.nStakeMaxAge = 60 * 60 * 24 * 90;             // stake age of full weight
         consensus.nStakeModifierInterval = 6 * 60 * 60;         // time to elapse before new modifier is computed
-        consensus.posLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.posLimit = (~arith_uint256 (0)) >> 32;
 
         consensus.nLyra2ZHeight = 10000;
         consensus.nPowAveragingWindowv1 = 24;
@@ -91,14 +89,13 @@ public:
         consensus.nPowAveragingWindowv2 = 120;
         
         consensus.newProofHeight = 10000000;
-        consensus.newTargetSpacing = 2.5 * 60;                  // 2.5 min 
-        consensus.newLimitShift = 24;
+        consensus.newTargetSpacing = 2 * 60;                    // 2 min 
 
         // The best chain should have at least this much work.
-        consensus.nMinimumChainWork = uint256S("0x000000000000000000000000000000000000000000000000011a9af7a7dfce42");//800000
+        consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000000127c9637e20fe7d");//1000000
 
         // By default assume that the signatures in ancestors of this block are valid.
-        consensus.defaultAssumeValid = uint256S("0xb29f4efa935b93477cbcaf250d96bfe495c37d6c10ffd87e402b31b41d3dc56e");//800000
+        consensus.defaultAssumeValid = uint256S("0x76928d1d18bc7e68fba6fdb66ad6145ee7312c98de76d95e353afc5d34e94750");//1000000
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -152,15 +149,8 @@ public:
                 {500000, uint256S("0xdbd781e1a5c96e38c6f37e85ddc79f808696ff38a107334b1d2aa0d1f3c54886")},
                 {728634, uint256S("0x33e82f201a0b4074af53080d26c4092e6284bdead512b8c189b9c53526078d77")},
                 {734864, uint256S("0x11367f424327987636e48a1d8d81b34d92c397a48171a53ead697ac3037ec6f3")},
-                {900000, uint256S("0x5c10c1e2f0c8ad01484ba89e5874c21e4142c4044da8d635db191f07eb4221bf")},
+                {1000000, uint256S("0x76928d1d18bc7e68fba6fdb66ad6145ee7312c98de76d95e353afc5d34e94750")},
             }
-        };
-
-        chainTxData = ChainTxData{
-            // Data from rpc: getchaintxstats 4096 0000000000000000002e63058c023a9a1de233554f28c7b21380b6c9003f36a8
-            /* nTime    */ 1582180420,
-            /* nTxCount */ 1218257,
-            /* dTxRate  */ 0.02736
         };
 
         /* disable fallback fee on mainnet */
@@ -183,21 +173,19 @@ public:
         consensus.CSVHeight = 5;
         consensus.WitnessHeight = 5;
 
-        consensus.powLimit = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.powLimitLegacy = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.nPowTargetTimespan = 10 * 60;
+        consensus.powLimit = (~arith_uint256 (0)) >> 16;
+        consensus.powLimitLegacy = (~arith_uint256 (0)) >> 16;
+        consensus.nPowTargetTimespan = 30 * 60;
         consensus.nPowTargetSpacingBegin = 5 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
-        consensus.nRuleChangeActivationThreshold = 9;
-        consensus.nMinerConfirmationWindow = 10;
         consensus.nPosTargetTimespan = 14 * 24 * 60 * 60;       // two weeks
         consensus.nPosTargetSpacing = 60 * 7 / 3;
         consensus.nCoinAgeTick = 60 * 60;
         consensus.nStakeMinAge = 60 * 60 * 2;                   // minimum age for coin age  
         consensus.nStakeMaxAge = 60 * 60 * 24 * 3;              // stake age of full weight
         consensus.nStakeModifierInterval = 6 * 60;              // time to elapse before new modifier is computed
-        consensus.posLimit = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.posLimit = (~arith_uint256 (0)) >> 24;
 
         consensus.nLyra2ZHeight = 10;
         consensus.nPowAveragingWindowv1 = 5;
@@ -208,7 +196,6 @@ public:
 
         consensus.newProofHeight = 30;
         consensus.newTargetSpacing = 1 * 60;                    // 1 min 
-        consensus.newLimitShift = 16;
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");
@@ -247,14 +234,8 @@ public:
 
         checkpointData = {
             {
+                {0, uint256S("0xf3b7fe4392b75efcaeb9fe5a617912a763572c69d088896bfe3cf796b1a6a866")},
             }
-        };
-
-        chainTxData = ChainTxData{
-            // Data from rpc: getchaintxstats 4096 0000000000000037a8cd3e06cd5edbfe9dd1dbcc5dacab279376ef7cfc2b4c75
-            /* nTime    */ 1531929919,
-            /* nTxCount */ 19438708,
-            /* dTxRate  */ 0.626
         };
 
         /* enable fallback fee on testnet */
@@ -276,13 +257,15 @@ public:
         consensus.BIP66Height = 1251; // BIP66 activated on regtest (Used in rpc activation tests)
         consensus.CSVHeight = 1400;
         consensus.WitnessHeight = 1400;
-        consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit = (~arith_uint256 (0)) >> 4;
+        consensus.powLimitLegacy = (~arith_uint256 (0)) >> 16;
+        consensus.posLimit = (~arith_uint256 (0)) >> 8;
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacingBegin = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = true;
-        consensus.nRuleChangeActivationThreshold = 108; // 75% for testchains
-        consensus.nMinerConfirmationWindow = 144; // Faster than normal for regtest (144 instead of 2016)
+        consensus.newProofHeight = 30;
+        consensus.newTargetSpacing = 1 * 60;                    // 1 min 
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");
@@ -313,12 +296,6 @@ public:
             {
                 {0, uint256S("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206")},
             }
-        };
-
-        chainTxData = ChainTxData{
-            0,
-            0,
-            0
         };
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,111);
