@@ -46,6 +46,10 @@ public:
         SetNull();
     }
 
+    bool IsNewestFormat() const {
+        return (nVersion & 0xFF010000) == 0x00010000;
+    }
+
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
@@ -56,7 +60,9 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
-        if (!(s.GetVersion() & SERIALIZE_BLOCK_LEGACY)) {
+        if (IsNewestFormat()) {
+            nFlags = 0;
+        } else if (!(s.GetVersion() & SERIALIZE_BLOCK_LEGACY)) {
             READWRITE(nFlags);
         } else if ((s.GetType() & SER_GETHASH) && (nFlags & BLOCK_PROOF_OF_STAKE)) {
             uint32_t flags = nFlags & BLOCK_PROOF_OF_STAKE;
@@ -93,11 +99,11 @@ public:
 
     bool IsProofOfStake() const
     {
-        return nFlags & BLOCK_PROOF_OF_STAKE;
+        return IsNewestFormat() ? (nVersion & 0x00020000) : (nFlags & BLOCK_PROOF_OF_STAKE);
     }
 
     void SetProofOfStake() {
-        nFlags |= BLOCK_PROOF_OF_STAKE;
+        if (IsNewestFormat()) { nVersion = (nVersion & 0x00FFFFFF) | 0x00020000; nFlags = 0; } else { nFlags |= BLOCK_PROOF_OF_STAKE; }
     }
 
     bool IsNewFormatBlock() const {
@@ -106,7 +112,16 @@ public:
 
     void SetNewFormatBlock() const {
         nFlags |= BLOCK_NEW_FORMAT;
-    }    
+    }
+    
+    int GetVersion() const {
+        return nVersion & 0xFFFF;
+    }
+    
+    void SetVersion(int ver) {
+        nVersion = (nVersion & 0x00FF0000) | 0x00010000 | (ver & 0x0000FFFF); 
+        nFlags = 0;
+    }
 };
 
 
@@ -139,7 +154,7 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITEAS(CBlockHeader, *this);
         READWRITE(vtx);
-        if (IsProofOfStake()) {
+        if (IsProofOfStake() && IsNewFormatBlock()) {
             READWRITE(vchBlockSig);
         } else if (ser_action.ForRead()) {
             vchBlockSig.clear();

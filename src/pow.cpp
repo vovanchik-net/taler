@@ -194,6 +194,7 @@ uint32_t GetNextWorkRequired(const CBlockIndex *pindexLast, const CBlockHeader *
     const CBlockIndex* pPrev = pindexLast;
     int64_t srcTimes = 0;
     int64_t nTimes = 0;
+    int TargetSpacing = params.nPowTargetSpacingBegin / 5;    
     int destBlockCount = 12;
     for (int i = 0; i < destBlockCount; i++) {
         while (pPrev && (pPrev->IsProofOfStake() != fProofOfStake)) pPrev = pPrev->pprev;
@@ -204,9 +205,9 @@ uint32_t GetNextWorkRequired(const CBlockIndex *pindexLast, const CBlockHeader *
         srcTimes += std::max(pPrev->GetBlockTime() - pPrev->pprev->GetBlockTime(), (int64_t)0);
         pPrev = pPrev->pprev;
     }
-    bnNew /= 78 * destBlockCount * params.newTargetSpacing;
+    bnNew /= 2 * 78 * destBlockCount * TargetSpacing;
     bnNew *= srcTimes;
-    nTimes /= params.newTargetSpacing;
+    nTimes /= TargetSpacing;
     while (nTimes > destBlockCount) { bnNew <<= 1; nTimes--; if (bnNew > bnLimit) break; }
     if (bnNew > (bnOld << 2)) bnNew = bnOld << 2;
     if (bnNew < (bnOld >> 3)) bnNew = bnOld >> 3;

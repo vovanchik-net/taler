@@ -3124,7 +3124,9 @@ bool getCoinInfo (std::map<uint256, uint64_t>& cache, const COutPoint& out, uint
     if (!cache.count(out.hash)) {
         Coin coin;
         if (pcoinsTip->GetCoin(out, coin) && (chainActive[coin.nHeight] != nullptr)) {
-            if (coin.nHeight <= Params().GetConsensus().TLRHeight + Params().GetConsensus().TLRInitLim) return false;
+            const Consensus::Params& consensus = Params().GetConsensus();
+            if ((chainActive.Height() < consensus.newProofHeight) &&
+                (coin.nHeight <= Params().GetConsensus().TLRHeight + Params().GetConsensus().TLRInitLim)) return false;
             correctCoin (out, coin, "getCoinInfo");
             uint64_t tmp = coin.nOffset; tmp <<= 32; tmp |= coin.nTime; 
             cache[out.hash] = tmp;
@@ -3168,7 +3170,7 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     for (const COutput& inpcoin : vCoins) {
         if (!inpcoin.fSpendable) continue;
         CInputCoin pcoin = inpcoin.GetInputCoin(); 
-        if (pcoin.txout.nValue < 1 * COIN) continue;
+        if (pcoin.txout.nValue < 10 * COIN) continue;
 
         uint32_t offset, time;
         if (!getCoinInfo (cachedCoins, pcoin.outpoint, time, offset)) continue;
@@ -3208,7 +3210,7 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
         if (!inpcoin.fSpendable) continue;
         CInputCoin pcoin = inpcoin.GetInputCoin();
         if (txNew.vin.size() > 31) break;
-        if (pcoin.txout.nValue > 1 * COIN) continue;
+        if (pcoin.txout.nValue > 10 * COIN) continue;
         if (txNew.vin[0].prevout == pcoin.outpoint) continue;
         uint32_t offset, time; 
         if (!getCoinInfo (cachedCoins, pcoin.outpoint, time, offset)) continue;
@@ -3219,9 +3221,7 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     }
 
     // Calculate coin age reward
-    if (pPrev->nHeight + 1 >= consensus.newProofHeight) {
-        nPosReward = GetBlockSubsidy (pPrev->nHeight + 1, consensus);
-    } else {
+    {
         uint64_t nCoinAge;
         CCoinsViewCache view(pcoinsTip.get());
         if (!GetCoinAge(txNew, view, nCoinAge, header.nTime, consensus))
@@ -3265,7 +3265,7 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
             return error("CreateCoinStake : exceeded coinstake size limit");
 
         // Check enough fee is paid
-        CAmount nFee = minFeeRate.GetFee(nBytes);
+        CAmount nFee = minFeeRate.GetFee(nBytes*2);
         if (nMinFee < nFee) {
             nMinFee = nFee;
             if (nMinFee > nCredit) return error("CreateCoinStake : Unable to create: nMinFee > nCredit");

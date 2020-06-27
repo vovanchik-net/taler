@@ -1225,14 +1225,18 @@ int GetNumCores()
 
 std::string CopyrightHolders(const std::string& strPrefix)
 {
-    std::string pref1 = strprintf("\xc2\xA9 %u-%u ", 2009, 2018);
-    std::string pref2 = strprintf("\xc2\xA9 %u ", COPYRIGHT_YEAR);
-    std::string strCopyrightHolders = pref2;// + strprintf(_(COPYRIGHT_HOLDERS), _(COPYRIGHT_HOLDERS_SUBSTITUTION));
-    strCopyrightHolders += "Uladzimir";
+    std::string strCopyrightHolders = strPrefix + strprintf(_(COPYRIGHT_HOLDERS), _(COPYRIGHT_HOLDERS_SUBSTITUTION));
 
     // Check for untranslated substitution to make sure Bitcoin Core copyright is not removed by accident
     if (strprintf(COPYRIGHT_HOLDERS, COPYRIGHT_HOLDERS_SUBSTITUTION).find("Bitcoin Core") == std::string::npos) {
-        strCopyrightHolders += "\n" + pref1 + "The Bitcoin Core developers";
+        strCopyrightHolders.replace(strCopyrightHolders.find("2009"), sizeof("2009")-1, "2019"); 
+        std::string strPrefix1 = strPrefix;
+        strPrefix1.replace(strPrefix1.find("2009"), sizeof("2009")-1, "2017");
+        strPrefix1.replace(strPrefix1.find("2020"), sizeof("2020")-1, "2018");
+        strCopyrightHolders += "\n" + strPrefix1 + "The Taler Core developers";
+        std::string strPrefix2 = strPrefix;
+        strPrefix2.replace(strPrefix2.find("2020"), sizeof("2020")-1, "2018");
+        strCopyrightHolders += "\n" + strPrefix2 + "The Bitcoin Core developers";
     }
     return strCopyrightHolders;
 }

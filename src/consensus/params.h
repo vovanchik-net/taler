@@ -104,7 +104,6 @@ struct Params {
     int64_t nNewDiffAdjustmentAlgorithmHeight;
 
     int newProofHeight;
-    int newTargetSpacing;
 };
 
 } // namespace Consensus

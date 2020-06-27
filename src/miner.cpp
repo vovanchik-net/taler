@@ -43,22 +43,6 @@ uint64_t nLastBlockTx = 0;
 uint64_t nLastBlockWeight = 0;
 int64_t nLastCoinStakeSearchInterval = 0;
 
-int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
-{
-    assert(!pblock->IsProofOfStake());
-    int64_t nOldTime = pblock->nTime;
-    int64_t nNewTime = std::max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
-
-    if (nOldTime < nNewTime)
-        pblock->nTime = nNewTime;
-
-    // Updating time can change work required on testnet:
-    if (consensusParams.fPowAllowMinDifficultyBlocks)
-        pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, consensusParams);
-
-    return nNewTime - nOldTime;
-}
-
 BlockAssembler::Options::Options() {
     blockMinFeeRate = CFeeRate(DEFAULT_BLOCK_MIN_TX_FEE);
     nBlockMaxWeight = DEFAULT_BLOCK_MAX_WEIGHT;
@@ -132,21 +116,36 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     pblocktemplate->vTxFees.push_back(-1); // updated at end
     pblocktemplate->vTxSigOpsCost.push_back(-1); // updated at end
 
+    LOCK2(cs_main, mempool.cs);
+    CBlockIndex* pindexPrev = chainActive.Tip();
+    assert(pindexPrev != nullptr);
+    nHeight = pindexPrev->nHeight + 1;
+    bool newstake = false;
+    if (nHeight >= chainparams.GetConsensus().newProofHeight) { 
+        pblock->SetVersion(3);
+        newstake = true;
+    } else if (nHeight >= chainparams.GetConsensus().TLRHeight) {
+        pblock->SetNewFormatBlock();
+        pblock->nVersion = 0x20000000;
+    } else {
+        pblock->nVersion = 0x20000000;
+    }
+    pblock->hashPrevBlock = pindexPrev->GetBlockHash();
+    if (fAddProofOfStake) {
+        if(nHeight <= chainparams.GetConsensus().TLRHeight + chainparams.GetConsensus().TLRInitLim) {
+            return nullptr;
+        }
+        pblock->SetProofOfStake();
+    }
+    pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
+    pblock->nNonce = 0;
+
     // pos: if coinstake available add coinstake tx
     static int64_t nLastCoinStakeSearchTime = GetAdjustedTime();  // only initialized at startup
     uint32_t nCoinStakeTime;
     CAmount nPosReward;
     if (fAddProofOfStake) {
         fPoSCancel = true;
-        CBlockIndex* pindexPrev = chainActive.Tip();
-        assert(pindexPrev != nullptr);
-        if(pindexPrev->nHeight + 1 <= chainparams.GetConsensus().TLRHeight + chainparams.GetConsensus().TLRInitLim) {
-            return nullptr;
-        }
-
-        pblock->SetProofOfStake();
-        pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
-        pblock->hashPrevBlock = pindexPrev->GetBlockHash();
         CMutableTransaction txCoinStake;
         nCoinStakeTime = GetAdjustedTime();
         int64_t nSearchTime = nCoinStakeTime;
@@ -167,13 +166,6 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
             return nullptr;
     }
 
-    LOCK2(cs_main, mempool.cs);
-    CBlockIndex* pindexPrev = chainActive.Tip();
-    assert(pindexPrev != nullptr);
-    nHeight = pindexPrev->nHeight + 1;
-
-    pblock->nVersion = 3;
-    
     pblock->nTime = pblock->IsProofOfStake() ? nCoinStakeTime : GetAdjustedTime();
     const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast();
 
@@ -212,26 +204,36 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     } else {
         coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
         coinbaseTx.vout[0].nValue = nFees + GetBlockSubsidy(pindexPrev->nPowHeight + 1, chainparams.GetConsensus());
-        if (pindexPrev->nHeight >= chainparams.GetConsensus().newProofHeight) {
-            coinbaseTx.vout[0].nValue = nFees + GetBlockSubsidy(pindexPrev->nHeight + 1, chainparams.GetConsensus());
-        }
     }
     coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
-    pblocktemplate->vchCoinbaseCommitment = GenerateCoinbaseCommitment(*pblock, pindexPrev, chainparams.GetConsensus());
+    if (pblock->IsProofOfStake()) {
+        CMutableTransaction staketx(*pblock->vtx[1]);
+        if (newstake) {
+            staketx.vout[0].nValue = 0;
+            staketx.vout[0].scriptPubKey = MakeCheckStakeScript (*pblock);
+        }    
+        if (!pwallet->SignTransaction(staketx)) {
+            LogPrintf("CreateCoinStake : failed to sign coinstake");
+            return nullptr;
+        }    
+        pblock->vtx[1] = MakeTransactionRef(std::move(staketx));
+    }
+    bool fHaveWitness = false;
+    for (const auto& tx : pblock->vtx) {
+        if (tx->HasWitness()) { fHaveWitness = true; break; }
+    }
+    if (fHaveWitness)
+        pblocktemplate->vchCoinbaseCommitment = GenerateCoinbaseCommitment(*pblock, pindexPrev, chainparams.GetConsensus());
     pblocktemplate->vTxFees[0] = -nFees;
 
     LogPrintf("CreateNewBlock(): block weight: %u txs: %u fees: %ld sigops %d\n", GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);
 
     // Fill in header
-    pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
     if (!pblock->IsProofOfStake()) {
-        UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev);
-        pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
+        pblock->nTime = std::max(pindexPrev->GetBlockTime()+1, GetAdjustedTime());
     }
-    pblock->nNonce         = 0;
     pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(*pblock->vtx[0]);
-    if (nHeight >= Params().GetConsensus().TLRHeight) { pblock->SetNewFormatBlock(); }
 
     CValidationState state;
     if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
@@ -632,7 +634,9 @@ void POSMinerThread (int POSIndex) {
             CBlock *pblock = &pblocktemplate->block;
             IncrementExtraNonce(pblock, chainActive.Tip(), extra);
             if (pblock->IsProofOfStake()) {
-                if (!SignBlock(*pblock, *pwallet)) continue;
+                if (chainActive.Height() + 1 < Params().GetConsensus().newProofHeight) {
+                    if (!SignBlock(*pblock, *pwallet)) continue;
+                }
                 LogPrintf("POSMinerThread: proof-of-stake block found %s\n", pblock->GetHash().ToString());
                 std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(*pblock);
                 try {

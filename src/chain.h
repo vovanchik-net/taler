@@ -223,19 +223,13 @@ public:
     uint64_t nStakeModifier; // hash modifier for proof-of-stake
     uint256 hashProofOfStake;
 
-    bool IsProofOfWork() const
-    {
-        return !(nFlags & BLOCK_PROOF_OF_STAKE);
+    bool IsProofOfStake() const {
+        return ((nVersion & 0xFF010000) == 0x00010000) ? (nVersion & 0x00020000) 
+                                                       : (nFlags & BLOCK_PROOF_OF_STAKE);
     }
 
-    bool IsProofOfStake() const
-    {
-        return (nFlags & BLOCK_PROOF_OF_STAKE);
-    }
-
-    void SetProofOfStake()
-    {
-        nFlags |= BLOCK_PROOF_OF_STAKE;
+    bool IsProofOfWork() const {
+        return !IsProofOfStake();
     }
 
     uint32_t GetStakeEntropyBit() const
@@ -437,19 +431,26 @@ public:
         if (nStatus & BLOCK_HAVE_UNDO)
             READWRITE(VARINT(nUndoPos));
 
-        READWRITE(nFlags);
-        READWRITE(nStakeModifier);
-        if (!Params().isLegacyBlock(nHeight)) {
-            if (IsProofOfStake()) {
-                READWRITE(hashProofOfStake);
-            } else if (ser_action.ForRead()) {
-                const_cast<CDiskBlockIndex*>(this)->hashProofOfStake = uint256();
-            };
-            READWRITE(VARINT(nPowHeight, VarIntMode::NONNEGATIVE_SIGNED));
-        } else {
-            if (ser_action.ForRead()) {
-                hashProofOfStake = uint256();
-                nPowHeight = nHeight;
+        if (nHeight >= Params().GetConsensus().newProofHeight) {
+            nFlags = 0;
+            nStakeModifier = 0;
+            hashProofOfStake = uint256();
+            nPowHeight = nHeight;
+        } else {    
+            READWRITE(nFlags);
+            READWRITE(nStakeModifier);
+            if (!Params().isLegacyBlock(nHeight)) {
+                if (IsProofOfStake()) {
+                    READWRITE(hashProofOfStake);
+                } else if (ser_action.ForRead()) {
+                    const_cast<CDiskBlockIndex*>(this)->hashProofOfStake = uint256();
+                };
+                READWRITE(VARINT(nPowHeight, VarIntMode::NONNEGATIVE_SIGNED));
+            } else {
+                if (ser_action.ForRead()) {
+                    hashProofOfStake = uint256();
+                    nPowHeight = nHeight;
+                }
             }
         }
 

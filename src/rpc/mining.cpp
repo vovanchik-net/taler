@@ -144,7 +144,6 @@ UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGen
             continue;
         }
         std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(*pblock);
-        if (nHeight + 1 >= consensus.TLRHeight) { shared_pblock->SetNewFormatBlock(); }
         if (!ProcessNewBlock(Params(), shared_pblock, true, nullptr))
             throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
         ++nHeight;
@@ -539,8 +538,6 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
     CBlock* pblock = &pblocktemplate->block; // pointer for convenience
     const Consensus::Params& consensusParams = Params().GetConsensus();
 
-    // Update nTime
-    UpdateTime(pblock, consensusParams, pindexPrev);
     pblock->nNonce = 0;
 
     // NOTE: If at some point we support pre-segwit miners post-segwit-activation, this needs to take segwit support into consideration
@@ -715,8 +712,10 @@ static UniValue submitblock(const JSONRPCRequest& request)
         const CBlockIndex* pindex = LookupBlockIndex(block.hashPrevBlock);
         if (pindex) {
             UpdateUncommittedBlockStructures(block, pindex, Params().GetConsensus());
-            if (pindex->nHeight + 1 >= Params().GetConsensus().TLRHeight) {
-                blockptr->SetNewFormatBlock();
+            if (pindex->nHeight >= Params().GetConsensus().newProofHeight) { 
+                block.SetVersion(block.GetVersion());
+            } else if (pindex->nHeight >= Params().GetConsensus().TLRHeight) {
+                block.SetNewFormatBlock();
             }
         }
     }

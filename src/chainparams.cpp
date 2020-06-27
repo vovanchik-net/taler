@@ -17,15 +17,17 @@
 
 #include <chainparamsseeds.h>
 
-static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
-{
+static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward) {
     CMutableTransaction txNew;
     txNew.nVersion = 1;
     txNew.vin.resize(1);
     txNew.vout.resize(1);
-    txNew.vin[0].scriptSig = CScript() << 486604799 << CScriptNum(4) << std::vector<unsigned char>((const unsigned char*)pszTimestamp, (const unsigned char*)pszTimestamp + strlen(pszTimestamp));
+    txNew.vin[0].scriptSig = CScript() << 486604799 << CScriptNum(4) <<
+        ParseHex("54616c6572207065727368616a612062656c617275736b616a61206b727970746176616c697574612062792044656e6973204c2069205365726765204c20");
     txNew.vout[0].nValue = genesisReward;
-    txNew.vout[0].scriptPubKey = genesisOutputScript;
+    txNew.vout[0].scriptPubKey
+        << ParseHex("04f360606cf909ce34d4276ce40a5dd6a844a4a72473086e0fc635f3c4195d77df513b7541dc5f6f6d01ec39e4b729893c6d42dd5e248379a32b5259f38f6bfbae") 
+        << OP_CHECKSIG;
 
     CBlock genesis;
     genesis.nTime    = nTime;
@@ -36,13 +38,6 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
     genesis.hashPrevBlock.SetNull();
     genesis.hashMerkleRoot = BlockMerkleRoot(genesis);
     return genesis;
-}
-
-static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
-{
-    const char* pszTimestamp = "Taler pershaja belaruskaja kryptavaliuta by Denis L i Serge L ";
-    const CScript genesisOutputScript = CScript() << ParseHex("04f360606cf909ce34d4276ce40a5dd6a844a4a72473086e0fc635f3c4195d77df513b7541dc5f6f6d01ec39e4b729893c6d42dd5e248379a32b5259f38f6bfbae") << OP_CHECKSIG; 
-    return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
 }
 
 void CChainParams::UpdateVersionBitsParameters(Consensus::DeploymentPos d, int64_t nStartTime, int64_t nTimeout)
@@ -88,14 +83,15 @@ public:
         consensus.nNewDiffAdjustmentAlgorithmHeight = 250000;
         consensus.nPowAveragingWindowv2 = 120;
         
-        consensus.newProofHeight = 10000000;
-        consensus.newTargetSpacing = 2 * 60;                    // 2 min 
+        consensus.newProofHeight = 2500000;
 
         // The best chain should have at least this much work.
-        consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000000127c9637e20fe7d");//1000000
+        consensus.nMinimumChainWork =
+            uint256S("0x000000000000000000000000000000000000000000000000009949b999cbe1f0"); // 250000
 
         // By default assume that the signatures in ancestors of this block are valid.
-        consensus.defaultAssumeValid = uint256S("0x76928d1d18bc7e68fba6fdb66ad6145ee7312c98de76d95e353afc5d34e94750");//1000000
+        consensus.defaultAssumeValid =
+            uint256S("0xe599ff322e9e285b524f2bcd7617a4a0a1b4a8d4d0f5279ce9c706d1ca3036b7"); // 250000
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -176,14 +172,14 @@ public:
         consensus.powLimit = (~arith_uint256 (0)) >> 16;
         consensus.powLimitLegacy = (~arith_uint256 (0)) >> 16;
         consensus.nPowTargetTimespan = 30 * 60;
-        consensus.nPowTargetSpacingBegin = 5 * 60;
+        consensus.nPowTargetSpacingBegin = 2.5 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nPosTargetTimespan = 14 * 24 * 60 * 60;       // two weeks
         consensus.nPosTargetSpacing = 60 * 7 / 3;
-        consensus.nCoinAgeTick = 60 * 60;
-        consensus.nStakeMinAge = 60 * 60 * 2;                   // minimum age for coin age  
-        consensus.nStakeMaxAge = 60 * 60 * 24 * 3;              // stake age of full weight
+        consensus.nCoinAgeTick = 10 * 60;
+        consensus.nStakeMinAge = 10 * 60 * 2;                   // minimum age for coin age  
+        consensus.nStakeMaxAge = 10 * 60 * 90;                  // stake age of full weight
         consensus.nStakeModifierInterval = 6 * 60;              // time to elapse before new modifier is computed
         consensus.posLimit = (~arith_uint256 (0)) >> 24;
 
@@ -195,7 +191,6 @@ public:
         consensus.nPowAveragingWindowv2 = 120;
 
         consensus.newProofHeight = 30;
-        consensus.newTargetSpacing = 1 * 60;                    // 1 min 
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");
@@ -260,12 +255,11 @@ public:
         consensus.powLimit = (~arith_uint256 (0)) >> 4;
         consensus.powLimitLegacy = (~arith_uint256 (0)) >> 16;
         consensus.posLimit = (~arith_uint256 (0)) >> 8;
-        consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
-        consensus.nPowTargetSpacingBegin = 10 * 60;
+        consensus.nPowTargetTimespan = 24 * 60 * 60;
+        consensus.nPowTargetSpacingBegin = 5 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = true;
         consensus.newProofHeight = 30;
-        consensus.newTargetSpacing = 1 * 60;                    // 1 min 
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");

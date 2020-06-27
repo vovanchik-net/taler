@@ -2714,7 +2714,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         for (unsigned int n = 0; n < nCount; n++) {
             vRecv >> headers[n];
             ReadCompactSize(vRecv); // ignore tx count; assume it is 0.
-            if (headers[n].IsProofOfStake()) { ReadCompactSize(vRecv); } // ignore vchBlockSig.
+            if (headers[n].IsProofOfStake() && headers[n].IsNewFormatBlock()) { ReadCompactSize(vRecv); } // ignore vchBlockSig.
         }
         vRecv.SetVersion(original_version);
 

@@ -31,6 +31,7 @@
 #include <shutdown.h>
 #include <txmempool.h>
 #include <util.h>
+#include <utilmoneystr.h>
 #include <utilstrencodings.h>
 #include <hash.h>
 #include <validationinterface.h>
@@ -1229,9 +1230,9 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
     softforks.push_back(SoftForkDesc("bip34", 2, tip, consensusParams));
     softforks.push_back(SoftForkDesc("bip66", 3, tip, consensusParams));
     softforks.push_back(SoftForkDesc("bip65", 4, tip, consensusParams));
-    softforks.push_back(Pair("CSV", consensusParams.CSVHeight));
-    softforks.push_back(Pair("Segwit", consensusParams.WitnessHeight));
-    obj.pushKV("softforks",             softforks);
+    softforks.pushKV("CSV", consensusParams.CSVHeight);
+    softforks.pushKV("Segwit", consensusParams.WitnessHeight);
+    obj.pushKV("softforks", softforks);
 
     obj.pushKV("warnings", GetWarnings("statusbar"));
     return obj;
@@ -2332,18 +2333,19 @@ std::string show_prc (int val, int total) {
 	return strprintf("%d.%02d", (int)prc, (((int)(100*prc))%100));
 }
 
-int show_log_data (const int data[9]) {
-	int total = data[0] + data[1] + data[2] + data[3] + data[4] + data[5] + data[6] + data[7] + data[8];
-	logWrite(strprintf(" <     1000 =  %d (%s)", data[0], show_prc (data[0], total)));
-	logWrite(strprintf(" <    10000 =  %d (%s)", data[1], show_prc (data[1], total)));
-	logWrite(strprintf(" <   100000 =  %d (%s)", data[2], show_prc (data[2], total)));
-	logWrite(strprintf(" <   1 CENT =  %d (%s)", data[3], show_prc (data[3], total)));
-	logWrite(strprintf(" <  10 CENT =  %d (%s)", data[4], show_prc (data[4], total)));
-	logWrite(strprintf(" <   1 COIN =  %d (%s)", data[5], show_prc (data[5], total)));
-	logWrite(strprintf(" <  10 COIN =  %d (%s)", data[6], show_prc (data[6], total)));
-	logWrite(strprintf(" < 100 COIN =  %d (%s)", data[7], show_prc (data[7], total)));
-	logWrite(strprintf(" > 100 COIN =  %d (%s)", data[8], show_prc (data[8], total)));
-	return total;
+void show_log (const int data[9], int& count, const uint64_t sdata[9], uint64_t& scount) {
+	count = data[0] + data[1] + data[2] + data[3] + data[4] + data[5] + data[6] + data[7] + data[8] + data[9];
+	scount = sdata[0] + sdata[1] + sdata[2] + sdata[3] + sdata[4] + sdata[5] + sdata[6] + sdata[7] + sdata[8] + sdata[9];
+	logWrite(strprintf(" <     1000 =  %d (%s), sum = %s", data[0], show_prc (data[0], count), FormatMoney(sdata[0])));
+	logWrite(strprintf(" <    10000 =  %d (%s), sum = %s", data[1], show_prc (data[1], count), FormatMoney(sdata[1])));
+	logWrite(strprintf(" <   100000 =  %d (%s), sum = %s", data[2], show_prc (data[2], count), FormatMoney(sdata[2])));
+	logWrite(strprintf(" <   1 CENT =  %d (%s), sum = %s", data[3], show_prc (data[3], count), FormatMoney(sdata[3])));
+	logWrite(strprintf(" <  10 CENT =  %d (%s), sum = %s", data[4], show_prc (data[4], count), FormatMoney(sdata[4])));
+	logWrite(strprintf(" <   1 COIN =  %d (%s), sum = %s", data[5], show_prc (data[5], count), FormatMoney(sdata[5])));
+	logWrite(strprintf(" <  10 COIN =  %d (%s), sum = %s", data[6], show_prc (data[6], count), FormatMoney(sdata[6])));
+	logWrite(strprintf(" < 100 COIN =  %d (%s), sum = %s", data[7], show_prc (data[7], count), FormatMoney(sdata[7])));
+	logWrite(strprintf(" > 100 COIN =  %d (%s), sum = %s", data[8], show_prc (data[8], count), FormatMoney(sdata[8])));
+	logWrite(strprintf(" >1000 COIN =  %d (%s), sum = %s", data[9], show_prc (data[9], count), FormatMoney(sdata[9])));
 }
 
 UniValue dumpinfo (const JSONRPCRequest& request) {
@@ -2356,13 +2358,20 @@ UniValue dumpinfo (const JSONRPCRequest& request) {
         );
 	int cnt1 = 0;
 	int cnt2 = 0;
-	int std0_cnt[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // UNK
-	int std1_cnt[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // HASH160
-	int std2_cnt[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // SCRIPT
-	int std3_cnt[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // PUBKEY
-	int std4_cnt[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // MultiHASH160
-	int std5_cnt[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // Withness_HASH160
-	int std6_cnt[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // Withness_SCRIPT
+	int std0_cnt[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // UNK
+	int std1_cnt[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // HASH160
+	int std2_cnt[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // SCRIPT
+	int std3_cnt[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // PUBKEY
+	int std4_cnt[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // MultiHASH160
+	int std5_cnt[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // Withness_HASH160
+	int std6_cnt[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // Withness_SCRIPT
+	uint64_t std0_sum[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // UNK
+	uint64_t std1_sum[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // HASH160
+	uint64_t std2_sum[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // SCRIPT
+	uint64_t std3_sum[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // PUBKEY
+	uint64_t std4_sum[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // MultiHASH160
+	uint64_t std5_sum[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // Withness_HASH160
+	uint64_t std6_sum[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // Withness_SCRIPT
 	
 	CCoinsViewDB pcoinsdbview2(0);
 	
@@ -2372,6 +2381,7 @@ UniValue dumpinfo (const JSONRPCRequest& request) {
 		Coin coin;
 		if (pcursor->GetKey(key) && pcursor->GetValue(coin) && (!coin.IsSpent())) {
 			int mode = 0;
+			if (coin.out.nValue >=1000 * COIN) { mode = 9; } else
 			if (coin.out.nValue >= 100 * COIN) { mode = 8; } else
 			if (coin.out.nValue >=  10 * COIN) { mode = 7; } else
 			if (coin.out.nValue >=   1 * COIN) { mode = 6; } else
@@ -2382,16 +2392,15 @@ UniValue dumpinfo (const JSONRPCRequest& request) {
 			if (coin.out.nValue >=       1000) { mode = 1; }
 			int stdd = -1;				
 			std::string rec = getOutAddr (coin.out.scriptPubKey, &stdd);
-			if (stdd == 1) { std1_cnt[mode]++; } else
-			if (stdd == 2) { std2_cnt[mode]++; } else
-			if (stdd == 3) { std3_cnt[mode]++; } else
-			if (stdd == 4) { std4_cnt[mode]++; } else
-			if (stdd == 5) { std5_cnt[mode]++; } else
-			if (stdd == 6) { std6_cnt[mode]++; } else
-						   { std0_cnt[mode]++; };
+			if (stdd == 1) { std1_cnt[mode]++; std1_sum[mode] += coin.out.nValue; } else
+			if (stdd == 2) { std2_cnt[mode]++; std2_sum[mode] += coin.out.nValue; } else
+			if (stdd == 3) { std3_cnt[mode]++; std3_sum[mode] += coin.out.nValue; } else
+			if (stdd == 4) { std4_cnt[mode]++; std4_sum[mode] += coin.out.nValue; } else
+			if (stdd == 5) { std5_cnt[mode]++; std5_sum[mode] += coin.out.nValue; } else
+			if (stdd == 6) { std6_cnt[mode]++; std6_sum[mode] += coin.out.nValue; } else
+                           { std0_cnt[mode]++; std0_sum[mode] += coin.out.nValue; };
 			if ((stdd == 0) || (mode >= 8)) {
-				logWrite (strprintf("%d.%08d : %s : %s : %d", coin.out.nValue / COIN, coin.out.nValue % COIN,
-					rec, key.hash.GetHex(), key.n));
+                logWrite (strprintf("%s : %s : %s : %d", FormatMoney(coin.out.nValue), rec, key.hash.GetHex(), key.n));
 				setProgress (++cnt1, ++cnt2);
 			} else { setProgress (++cnt1, -1); }
 		}
@@ -2400,89 +2409,40 @@ UniValue dumpinfo (const JSONRPCRequest& request) {
 	} 		
 	setProgress (0, 0);
 
-	logWrite (" ===   HASH160   === ");
-	int total1 = show_log_data (std1_cnt);
-	logWrite (" ===   SCRIPT   === ");
-	int total2 = show_log_data (std2_cnt);
-	logWrite (" ===   PUBKEY   === ");
-	int total3 = show_log_data (std3_cnt);
-	logWrite (" ===   MultiHASH160   === ");
-	int total4 = show_log_data (std4_cnt);
-	logWrite (" ===   Withness_HASH160   === ");
-	int total5 = show_log_data (std5_cnt);
-	logWrite (" ===   Withness_SCRIPT   === ");
-	int total6 = show_log_data (std6_cnt);
-	logWrite (" ===   UNK   === ");
-	int total0 = show_log_data (std0_cnt);
-	logWrite (" ===   TOTAL   === ");
-	int total =	total0 + total1 + total2 + total3 + total4 + total5 + total6;
-	logWrite (strprintf(" HASH160          = %d (%s)", total1, show_prc (total1, total)));
-	
-	logWrite (strprintf(" SCRIPT           = %d (%s)", total2, show_prc (total2, total)));
-	logWrite (strprintf(" PUBKEY           = %d (%s)", total3, show_prc (total3, total)));
-	logWrite (strprintf(" MultiHASH160     = %d (%s)", total4, show_prc (total4, total)));
-	logWrite (strprintf(" Withness_HASH160 = %d (%s)", total5, show_prc (total5, total)));
-	logWrite (strprintf(" Withness_SCRIPT  = %d (%s)", total6, show_prc (total6, total)));
-	logWrite (strprintf(" UNK              = %d (%s)", total0, show_prc (total0, total)));
+    int count[7];
+    uint64_t scount[7];
+    logWrite (" ===   HASH160   === ");
+    show_log (std1_cnt, count[1], std1_sum, scount[1]);
+    logWrite (" ===   SCRIPT   === ");
+    show_log (std2_cnt, count[2], std2_sum, scount[2]);
+    logWrite (" ===   PUBKEY   === ");
+    show_log (std3_cnt, count[3], std3_sum, scount[3]);
+    logWrite (" ===   MultiHASH160   === ");
+    show_log (std4_cnt, count[4], std4_sum, scount[4]);
+    logWrite (" ===   Withness_HASH160   === ");
+    show_log (std5_cnt, count[5], std5_sum, scount[5]);
+    logWrite (" ===   Withness_SCRIPT   === ");
+    show_log (std6_cnt, count[6], std6_sum, scount[6]);
+    logWrite (" ===   UNK   === ");
+    show_log (std0_cnt, count[7], std0_sum, scount[7]);
+
+    logWrite (" ===   TOTAL   ===");
+    int total = count[1] + count[2] + count[3] + count[4] + count[5] + count[6] + count[7];
+    logWrite (strprintf(" HASH160          = %d (%s), sum = %s", count[1], show_prc (count[1], total), FormatMoney(scount[1])));
+    logWrite (strprintf(" SCRIPT           = %d (%s), sum = %s", count[2], show_prc (count[2], total), FormatMoney(scount[2])));
+    logWrite (strprintf(" PUBKEY           = %d (%s), sum = %s", count[3], show_prc (count[3], total), FormatMoney(scount[3])));
+    logWrite (strprintf(" MultiHASH160     = %d (%s), sum = %s", count[4], show_prc (count[4], total), FormatMoney(scount[4])));
+    logWrite (strprintf(" Withness_HASH160 = %d (%s), sum = %s", count[5], show_prc (count[5], total), FormatMoney(scount[5])));
+    logWrite (strprintf(" Withness_SCRIPT  = %d (%s), sum = %s", count[6], show_prc (count[6], total), FormatMoney(scount[6])));
+    logWrite (strprintf(" UNK              = %d (%s), sum = %s", count[7], show_prc (count[7], total), FormatMoney(scount[7])));
+
+    logWrite ("");
+    int64_t stotal = scount[1] + scount[2] + scount[3] + scount[4] + scount[5] + scount[6] + scount[7];
+    logWrite (strprintf(" total = %s", FormatMoney(stotal)));
 	setProgress (0, 0);
 
     UniValue ret(UniValue::VOBJ);
     ret.push_back(Pair("success", "true"));			
-    return ret;
-}
-
-UniValue dumpdiff (const JSONRPCRequest& request) {
-    if (request.fHelp)
-        throw std::runtime_error(
-            "dumpdiff\n"
-            "\nExamples:\n"
-            + HelpExampleCli("dumpdiff", "")
-        );
-
-    int64_t powcnt = 12;
-    int64_t poscnt = 12;
-    int64_t needpow = Params().GetConsensus().newTargetSpacing * powcnt;
-    int64_t needpos = Params().GetConsensus().newTargetSpacing * poscnt;
-    if (Params().NetworkIDString() == "main") {
-        powcnt = 120;
-        poscnt = 2;
-        needpow = powcnt * 60;
-        needpos = poscnt * Params().GetConsensus().nPosTargetSpacing;
-    }
-    //logWrite (strprintf("powcnt = %d", powcnt));
-    //logWrite (strprintf("poscnt = %d", poscnt));
-    //logWrite (strprintf("needpow = %d", needpow));
-    //logWrite (strprintf("needpos = %d", needpos));
-    int n = chainActive.Height() - 9999; 
-    if (n < 0) n = 0;
-	for(int i=chainActive.Height(); i>n; i--) {
-		CBlockIndex* pblockindex = chainActive[i];
-        bool fProofOfStake = pblockindex->IsProofOfStake();
-        int64_t actt = 0;
-        int64_t cnt = (fProofOfStake ? poscnt : powcnt);
-        int64_t needt = (fProofOfStake ? needpos : needpow);
-        const CBlockIndex* pPrev = pblockindex;
-        for ( ; cnt > 0; cnt--) {
-            while (pPrev && (pPrev->IsProofOfStake() != fProofOfStake)) pPrev = pPrev->pprev;
-            if (pPrev == nullptr) break;
-            if (pPrev->pprev == nullptr) break;
-            actt += (pPrev->GetBlockTime() - pPrev->pprev->GetBlockTime());
-            pPrev = pPrev->pprev;
-        }
-        if (fProofOfStake) {
-            logWrite (strprintf("chainPOS = %7d, diff = %10.6f, Actual = %7d, Target = %7d, Speed = %4d%%, time = %s", 
-                i, GetDifficulty(false, pblockindex), actt, needt, ((actt != 0) ? (needt * 100) / actt : -1), 
-                FormatISO8601DateTime(pblockindex->GetBlockTime())));
-        } else {
-            logWrite (strprintf("chainPOW = %7d, diff = %10.6f, Actual = %7d, Target = %7d, Speed = %4d%%, time = %s", 
-                i, GetDifficulty(false, pblockindex), actt, needt, ((actt != 0) ? (needt * 100) / actt : -1), 
-                FormatISO8601DateTime(pblockindex->GetBlockTime())));
-        }
-    }
-    
-	logWrite ("*");
-    UniValue ret(UniValue::VOBJ);
-    ret.push_back(Pair("success", "true"));
     return ret;
 }
 
@@ -2513,10 +2473,9 @@ static const CRPCCommand commands[] =
     { "blockchain",         "preciousblock",          &preciousblock,          {"blockhash"} },
     { "blockchain",         "scantxoutset",           &scantxoutset,           {"action", "scanobjects"} },
 
-    { "dump",         		"dumpcoin",           	  &dumpcoin,               {"minout"} },
-    { "dump",         		"dumpblock",         	  &dumpblock,              {"startblock", "numblock", "ext"} },
-    { "dump",         		"dumpinfo",       	  	  &dumpinfo,               {"minout"} }, 
-    { "dump",         		"dumpdiff",           	  &dumpdiff,               {} },
+    { "dump",         	    "dumpcoin",           	  &dumpcoin,               {"minout"} },
+    { "dump",         	    "dumpblock",         	  &dumpblock,              {"startblock", "numblock", "ext"} },
+    { "dump",               "dumpinfo",       	  	  &dumpinfo,               {"minout"} }, 
 
     /* Not shown in help */
     { "hidden",             "invalidateblock",        &invalidateblock,        {"blockhash"} },

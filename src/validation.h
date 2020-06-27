@@ -490,6 +490,8 @@ inline bool IsBlockPruned(const CBlockIndex* pblockindex)
     return (fHavePruned && !(pblockindex->nStatus & BLOCK_HAVE_DATA) && pblockindex->nTx > 0);
 }
 
+CScript MakeCheckStakeScript (const CBlock& block);
+
 void correctCoin (const COutPoint &prevout, Coin& coin, std::string caller);
 bool GetCoinAge (const CTransaction& tx, const CCoinsViewCache& view, uint64_t& nCoinAge, uint32_t nTime,
     const Consensus::Params& params);

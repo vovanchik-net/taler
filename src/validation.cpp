@@ -1184,7 +1184,7 @@ CAmount GetCoinSupply(int nPowHeight, const Consensus::Params& consensusParams)
 CAmount GetBlockSubsidy(int nPowHeight, const Consensus::Params& consensusParams)
 {
     if (nPowHeight >= consensusParams.newProofHeight) 
-        return ((4 - std::min((nPowHeight - consensusParams.newProofHeight) >> 20, 3)) * COIN);
+        return ((7 - std::min((nPowHeight - consensusParams.newProofHeight) >> 20, 6)) * COIN);
 
     if (nPowHeight == 1) {
         return CAmount(2333333 * COIN);
@@ -1222,6 +1222,9 @@ CAmount GetProofOfStakeBlockSubsidy(int nPowHeight, const Consensus::Params& con
 // ppcoin: miner's coin stake is rewarded based on coin age spent (coin-days)
 CAmount GetProofOfStakeReward(int64_t nCoinAge, int nPowHeight, const Consensus::Params& consensusParams)
 {
+    if (nPowHeight >= consensusParams.newProofHeight) 
+        return ((7 - std::min((nPowHeight - consensusParams.newProofHeight) >> 20, 6)) * COIN);
+
     int64_t nRewardCoinYear = ( CENT * 100 * ( (GetProofOfStakeBlockSubsidy(nPowHeight, consensusParams) * 525600) / COIN) ) / ( GetCoinSupply(nPowHeight, consensusParams) / COIN);  // creation amount per coin-year
 	
     CAmount nSubsidy =  nCoinAge * 33 / (365 * 33 + 8) * nRewardCoinYear;
@@ -2092,9 +2095,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                                      REJECT_INVALID, "bad-txns-coinstake-fee-too-small");
                 }
 
-                if (pindex->nHeight >= consensus.newProofHeight) {
-                    posReward = GetBlockSubsidy (pindex->nHeight, consensus);
-                } else {
+                {
                     uint64_t nCoinAge;
                     if (!GetCoinAge(tx, view, nCoinAge, block.GetBlockTime(), consensus))
                         return error("CheckInputs() : %s unable to get coin age for coinstake", tx.GetHash().ToString());
@@ -2149,12 +2150,10 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
 
     CAmount blockReward = nFees;
     if (block.IsProofOfWork()) {
-        if (pindex->nHeight >= consensus.newProofHeight) {
-            blockReward += GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
-        } else {
-            blockReward += GetBlockSubsidy(pindex->nPowHeight, chainparams.GetConsensus());
-        }
-    } else { blockReward += posReward; }
+        blockReward += GetBlockSubsidy(pindex->nPowHeight, chainparams.GetConsensus());
+    } else { 
+        blockReward += posReward;
+    }
     if (block.vtx[0]->GetValueOut() > blockReward)
         return state.DoS(100, error("ConnectBlock() : coinstake pays too much (actual=%d vs limit=%d)",
             block.vtx[0]->GetValueOut(), blockReward), REJECT_INVALID, "bad-cs-amount");
@@ -3253,6 +3252,38 @@ static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state,
     return true;
 }
 
+CScript MakeCheckStakeScript (const CBlock& block) {
+    std::vector<uint256> leaves;
+    leaves.resize(block.vtx.size());
+    for (size_t s = 0; s < block.vtx.size(); s++) {
+        leaves[s] = block.vtx[s]->GetHash();
+    }
+    if (block.vtx.size() >= 1) {
+        CHashWriter ss(SER_GETHASH, 0);
+        ss << block.vtx[0]->nVersion;
+        for (const auto& txin : block.vtx[0]->vin) {
+            ss << txin.prevout;
+            ss << txin.nSequence;            
+        }
+        for (const auto& txout : block.vtx[0]->vout) {
+            if (!((txout.scriptPubKey.size() > 32) && (txout.scriptPubKey[0] == OP_RETURN)))
+                ss << txout;
+        }
+        ss << block.vtx[0]->nLockTime;
+        leaves[0] = ss.GetHash();
+    }
+    if (block.vtx.size() >= 2) leaves[1].SetNull(); // The stake hash is 0.
+    uint256 hash = ComputeMerkleRoot(std::move(leaves));
+    CScript ret;
+    ret.resize(36);
+    ret[0] = OP_RETURN;
+    ret[1] = 0x22;
+    ret[2] = 0x6B;
+    ret[3] = 0x76;
+    memcpy(&ret[4], hash.begin(), 32);    
+    return ret;
+}
+
 bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::Params& consensusParams, CBlockIndex* pindexPrev, bool fCheckPOW, bool fCheckMerkleRoot)
 {
     // These are checks that are independent of context.
@@ -3317,9 +3348,25 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
         block.fChecked = true;
 
     // pos: check block signature
-    if (fCheckPOW && !CheckBlockSignature(block))
-        return state.DoS(100, false, REJECT_INVALID, "bad-blk-sign", false, "bad block signature");
-
+    if (fCheckPOW) {
+        int nHeight = 0;
+        pindexPrev = LookupBlockIndex(block.hashPrevBlock);
+        if (pindexPrev) nHeight = pindexPrev->nHeight;
+        if (nHeight + 1 < consensusParams.newProofHeight) {
+            if (!CheckBlockSignature(block))
+                return state.DoS(100, false, REJECT_INVALID, "bad-blk-sign", false, "bad block signature");
+        } else if (block.IsProofOfStake()) {
+            if (block.vtx.size() < 2)
+                state.DoS(100, false, REJECT_INVALID, "bad-stake-merkle", false, "block too small");
+            if (block.vtx[1]->vout.size() < 2)
+                state.DoS(100, false, REJECT_INVALID, "bad-stake-merkle", false, "tx too small");
+            CScript sign = MakeCheckStakeScript (block);
+            const CTxOut& out = block.vtx[1]->vout[0];
+            if ((out.scriptPubKey.size() < sign.size()) || (memcmp(&out.scriptPubKey[0], &sign[0], 36))) {
+                return state.DoS(100, false, REJECT_INVALID, "bad-stake-merkle", false, "block stake merkle is invalid");
+            }
+        }
+    }
     return true;
 }
 
@@ -3670,9 +3717,12 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, CVali
         if (pindex->nChainWork < nMinimumChainWork) return true;
     }
 
-    if (block.IsNewFormatBlock() != (pindex->nHeight >= chainparams.GetConsensus().TLRHeight)) {
-        return state.Invalid(false, REJECT_INVALID, "2fork-error", "AcceptBlock(): block format does not match expected nHeight: %s format at %d");
-        return error("AcceptBlock(): block format does not match expected nHeight: %s format at %d", (block.IsNewFormatBlock() ? "new" : "old"), pindex->nHeight);
+    if (block.IsNewestFormat() != (pindex->nHeight >= chainparams.GetConsensus().newProofHeight)) {
+        return state.Invalid(false, REJECT_INVALID, "3fork-error", "AcceptBlock: block format does not match expected version");
+    }
+    if (block.IsNewFormatBlock() != ((pindex->nHeight >= chainparams.GetConsensus().TLRHeight) && 
+                                     (pindex->nHeight < chainparams.GetConsensus().newProofHeight)))  {
+        return state.Invalid(false, REJECT_INVALID, "2fork-error", "AcceptBlock: block format does not match expected version");
     }
 
     if (pindex->nHeight > 0) { 
