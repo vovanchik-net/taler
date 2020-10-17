@@ -712,9 +712,7 @@ static UniValue submitblock(const JSONRPCRequest& request)
         const CBlockIndex* pindex = LookupBlockIndex(block.hashPrevBlock);
         if (pindex) {
             UpdateUncommittedBlockStructures(block, pindex, Params().GetConsensus());
-            if (pindex->nHeight >= Params().GetConsensus().newProofHeight) { 
-                block.SetVersion(block.GetVersion());
-            } else if (pindex->nHeight >= Params().GetConsensus().TLRHeight) {
+            if (Params().forkNumber(pindex->nHeight) == 2) {
                 block.SetNewFormatBlock();
             }
         }

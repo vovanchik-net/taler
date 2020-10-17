@@ -13,11 +13,9 @@
 
 //pos: find last block index up to pindex
 const CBlockIndex *GetLastBlockIndex(const CBlockIndex *pindex, const Consensus::Params &params, bool fProofOfStake) {
-    const int32_t TLRHeight = params.TLRHeight;
-
     if (fProofOfStake) {
         while (pindex && pindex->pprev && !pindex->IsProofOfStake()) {
-            if (pindex->nHeight <= TLRHeight)
+            if (params.forkNumber(pindex->nHeight) < 2) 
                 return nullptr;
             pindex = pindex->pprev;
         }
@@ -31,7 +29,7 @@ const CBlockIndex *GetLastBlockIndex(const CBlockIndex *pindex, const Consensus:
 
 uint32_t
 GetNextWorkRequiredForPos(const CBlockIndex *pindexLast, const CBlockHeader *pblock, const Consensus::Params &params) {
-    assert((pindexLast->nHeight + 1) > params.TLRHeight + params.TLRInitLim);
+    assert(params.forkNumber(pindexLast->nHeight + 1) >= 2);
 
     const CBlockIndex *pindexPrev = GetLastBlockIndex(pindexLast, params, true);
     if (pindexPrev == nullptr)
@@ -186,7 +184,7 @@ GetNextWorkRequiredForPow(const CBlockIndex *pindexLast, const CBlockHeader *pbl
 uint32_t GetNextWorkRequired(const CBlockIndex *pindexLast, const CBlockHeader *pblock, const Consensus::Params &params) {
     assert(pindexLast != nullptr);
     bool fProofOfStake = pblock->IsProofOfStake();
-    if (pindexLast->nHeight < params.newProofHeight)
+    if (params.forkNumber(pindexLast->nHeight) < 3)
         return fProofOfStake ? GetNextWorkRequiredForPos(pindexLast, pblock, params) :
                                GetNextWorkRequiredForPow(pindexLast, pblock, params);
     //v1.7 Calc difficulty PoW & PoS. Copyright by Uladzimir(https://t.me/vovanchik_net)

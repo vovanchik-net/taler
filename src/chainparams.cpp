@@ -79,7 +79,6 @@ public:
         consensus.nLyra2ZHeight = 10000;
         consensus.nPowAveragingWindowv1 = 24;
         consensus.TLRHeight = 130000;
-        consensus.TLRInitLim = 300;
         consensus.nNewDiffAdjustmentAlgorithmHeight = 250000;
         consensus.nPowAveragingWindowv2 = 120;
         
@@ -87,11 +86,11 @@ public:
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork =
-            uint256S("0x000000000000000000000000000000000000000000000000009949b999cbe1f0"); // 250000
+            uint256S("0x0000000000000000000000000000000000000000000000000135620a1169e577"); // 1200000
 
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid =
-            uint256S("0xe599ff322e9e285b524f2bcd7617a4a0a1b4a8d4d0f5279ce9c706d1ca3036b7"); // 250000
+            uint256S("0xc3ac6fdf3f57851af1928925dcb6354cf42658c15824ab77d14a9e150bacc94e"); // 1200000
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -186,7 +185,6 @@ public:
         consensus.nLyra2ZHeight = 10;
         consensus.nPowAveragingWindowv1 = 5;
         consensus.TLRHeight = 20;
-        consensus.TLRInitLim = 5;
         consensus.nNewDiffAdjustmentAlgorithmHeight = 21000;
         consensus.nPowAveragingWindowv2 = 120;
 

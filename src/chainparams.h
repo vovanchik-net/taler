@@ -70,7 +70,7 @@ public:
     uint64_t PruneAfterHeight() const { return nPruneAfterHeight; }
     /** Make miner stop after a block is found. In RPC, don't return until nGenProcLimit blocks are generated */
     bool MineBlocksOnDemand() const { return fMineBlocksOnDemand; }
-    bool isLegacyBlock(uint32_t nHeight) const { return nHeight < (uint32_t)this->consensus.TLRHeight; }
+    int forkNumber (int nHeight) const { return consensus.forkNumber(nHeight); }
     /** Return the BIP70 network string (main, test or regtest) */
     std::string NetworkIDString() const { return strNetworkID; }
     /** Return true if the fallback fee is by default enabled for this network */

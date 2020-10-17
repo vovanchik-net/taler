@@ -1183,8 +1183,8 @@ CAmount GetCoinSupply(int nPowHeight, const Consensus::Params& consensusParams)
 
 CAmount GetBlockSubsidy(int nPowHeight, const Consensus::Params& consensusParams)
 {
-    if (nPowHeight >= consensusParams.newProofHeight) 
-        return ((7 - std::min((nPowHeight - consensusParams.newProofHeight) >> 20, 6)) * COIN);
+    if (consensusParams.forkNumber(nPowHeight) >= 3)
+        return ((7 - std::min(nPowHeight >> 20, 6)) * COIN);
 
     if (nPowHeight == 1) {
         return CAmount(2333333 * COIN);
@@ -1214,7 +1214,7 @@ CAmount GetBlockSubsidy(int nPowHeight, const Consensus::Params& consensusParams
 
 CAmount GetProofOfStakeBlockSubsidy(int nPowHeight, const Consensus::Params& consensusParams)
 {
-    if(nPowHeight < consensusParams.TLRHeight)
+    if (consensusParams.forkNumber(nPowHeight) < 2) 
         return 0;
     return GetBlockSubsidy(nPowHeight, consensusParams) * 30 / 70;
 }
@@ -1222,8 +1222,8 @@ CAmount GetProofOfStakeBlockSubsidy(int nPowHeight, const Consensus::Params& con
 // ppcoin: miner's coin stake is rewarded based on coin age spent (coin-days)
 CAmount GetProofOfStakeReward(int64_t nCoinAge, int nPowHeight, const Consensus::Params& consensusParams)
 {
-    if (nPowHeight >= consensusParams.newProofHeight) 
-        return ((7 - std::min((nPowHeight - consensusParams.newProofHeight) >> 20, 6)) * COIN);
+    if (consensusParams.forkNumber(nPowHeight) >= 3)
+        return ((7 - std::min(nPowHeight >> 20, 6)) * COIN);
 
     int64_t nRewardCoinYear = ( CENT * 100 * ( (GetProofOfStakeBlockSubsidy(nPowHeight, consensusParams) * 525600) / COIN) ) / ( GetCoinSupply(nPowHeight, consensusParams) / COIN);  // creation amount per coin-year
 	
@@ -1461,11 +1461,13 @@ bool CheckInputs(const CTransaction& tx, CValidationState &state, const CCoinsVi
             uint256 hashCacheEntry;
             // We only use the first 19 bytes of nonce to avoid a second SHA
             // round - giving us 19 + 32 + 4 = 55 bytes (+ 8 + 1 = 64)
-            static_assert(55 - sizeof(flags) - 32 >= 128/8, "Want at least 128 bits of nonce for script execution cache");
-            CSHA256().Write(scriptExecutionCacheNonce.begin(), 55 - sizeof(flags) - 32).Write(tx.GetWitnessHash().begin(), 32).Write((unsigned char*)&flags, sizeof(flags)).Finalize(hashCacheEntry.begin());
-            AssertLockHeld(cs_main); //TODO: Remove this requirement by making CuckooCache not require external locks
-            if (scriptExecutionCache.contains(hashCacheEntry, !cacheFullScriptStore)) {
-                return true;
+            if (cacheFullScriptStore && !pvChecks) {
+                static_assert(55 - sizeof(flags) - 32 >= 128/8, "Want at least 128 bits of nonce for script execution cache");
+                CSHA256().Write(scriptExecutionCacheNonce.begin(), 55 - sizeof(flags) - 32).Write(tx.GetWitnessHash().begin(), 32).Write((unsigned char*)&flags, sizeof(flags)).Finalize(hashCacheEntry.begin());
+                AssertLockHeld(cs_main); //TODO: Remove this requirement by making CuckooCache not require external locks
+                if (scriptExecutionCache.contains(hashCacheEntry, !cacheFullScriptStore)) {
+                    return true;
+                }
             }
 
             for (unsigned int i = 0; i < tx.vin.size(); i++) {
@@ -1926,7 +1928,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     const Consensus::Params& consensus = chainparams.GetConsensus();
     uint256 hashProofOfStake;
     if (block.IsProofOfStake()) {
-        if(pindex->nHeight <= consensus.TLRHeight + consensus.TLRInitLim) {
+        if (consensus.forkNumber(pindex->nHeight) < 2) {
             return error("%s: adding proof-of-stake block was rejected due to its height (%d): %s\n", __func__, pindex->nHeight, block.GetHash().ToString());
         }
         if (block.vtx.size() < 2) {
@@ -1947,7 +1949,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         }
     }
 
-    if (pindex->nHeight < consensus.newProofHeight) {
+    if (!block.IsNewestFormat()) {
         uint64_t nStakeModifier = 0;
         bool fGeneratedStakeModifier = false;
         if (!GetStakeModifier(pindex, nStakeModifier, fGeneratedStakeModifier)) {
@@ -2158,11 +2160,11 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         return state.DoS(100, error("ConnectBlock() : coinstake pays too much (actual=%d vs limit=%d)",
             block.vtx[0]->GetValueOut(), blockReward), REJECT_INVALID, "bad-cs-amount");
     if (block.vtx[0]->GetValueOut() < blockReward) {
-        if (pindex->nHeight >= consensus.newProofHeight) {
+        if (block.IsNewestFormat()) {
             return state.DoS(100, error("ConnectBlock() : coinstake lost pays too much (actual=%d vs limit=%d)",
                 block.vtx[0]->GetValueOut(), blockReward), REJECT_INVALID, "bad-cs-amount");
         } else {
-            LogPrintf("WARNING:Lost money %d in block %d\n", blockReward - block.vtx[0]->GetValueOut(), pindex->nHeight);
+            LogPrintf("WARNING:Lost money %s in block %d\n", FormatMoney(blockReward - block.vtx[0]->GetValueOut()), pindex->nHeight);
         }
     }        
 
@@ -2246,7 +2248,7 @@ bool CheckProofOfStake (const CBlockHeader& block, int height, const Consensus::
     arith_uint256 bnTarget;
     bnTarget.SetCompact(block.nBits);
     CDataStream ss(SER_GETHASH, 0);
-    if (height >= params.newProofHeight) {
+    if (params.forkNumber(height) >= 3) {
         bnTarget *= std::min((int)((block.nTime - time) / params.nCoinAgeTick), 99);
         bnTarget *= std::min((int)(value / COIN), 9999);
         ss << out.n << block.hashPrevBlock << out.hash << block.nTime << block.nBits << 0; 
@@ -2281,7 +2283,8 @@ bool CheckProofOfWork (const CBlockHeader& block, int height, const Consensus::P
     bool fNegative;
     bool fOverflow;
     arith_uint256 bnTarget;
-    const arith_uint256& powLimit = height < params.nLyra2ZHeight ? params.powLimitLegacy : params.powLimit;
+    arith_uint256 powLimit = height < params.nLyra2ZHeight ? params.powLimitLegacy : params.powLimit;
+    if (params.forkNumber(height) >= 3) powLimit = params.powLimitLegacy;
     bnTarget.SetCompact (block.nBits, &fNegative, &fOverflow);
 
     // Check range
@@ -3255,7 +3258,7 @@ static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state,
 CScript MakeCheckStakeScript (const CBlock& block) {
     std::vector<uint256> leaves;
     leaves.resize(block.vtx.size());
-    for (size_t s = 0; s < block.vtx.size(); s++) {
+    for (size_t s = 2; s < block.vtx.size(); s++) {
         leaves[s] = block.vtx[s]->GetHash();
     }
     if (block.vtx.size() >= 1) {
@@ -3263,16 +3266,23 @@ CScript MakeCheckStakeScript (const CBlock& block) {
         ss << block.vtx[0]->nVersion;
         for (const auto& txin : block.vtx[0]->vin) {
             ss << txin.prevout;
+            ss << txin.scriptSig;
             ss << txin.nSequence;            
         }
         for (const auto& txout : block.vtx[0]->vout) {
-            if (!((txout.scriptPubKey.size() > 32) && (txout.scriptPubKey[0] == OP_RETURN)))
+            if (!((txout.scriptPubKey.size() >= 38) &&
+                    (txout.scriptPubKey[0] == OP_RETURN) && (txout.scriptPubKey[1] == 0x24) && (txout.scriptPubKey[2] == 0xaa) &&
+                    (txout.scriptPubKey[3] == 0x21) && (txout.scriptPubKey[4] == 0xa9) && (txout.scriptPubKey[5] == 0xed)))
                 ss << txout;
         }
         ss << block.vtx[0]->nLockTime;
         leaves[0] = ss.GetHash();
     }
-    if (block.vtx.size() >= 2) leaves[1].SetNull(); // The stake hash is 0.
+    if (block.vtx.size() >= 2) {
+        CHashWriter ss(SER_GETHASH, 0);
+        ss << block.nVersion << block.hashPrevBlock << block.nTime << block.nBits << block.nNonce;
+        leaves[1] = ss.GetHash();
+    }
     uint256 hash = ComputeMerkleRoot(std::move(leaves));
     CScript ret;
     ret.resize(36);
@@ -3352,7 +3362,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
         int nHeight = 0;
         pindexPrev = LookupBlockIndex(block.hashPrevBlock);
         if (pindexPrev) nHeight = pindexPrev->nHeight;
-        if (nHeight + 1 < consensusParams.newProofHeight) {
+        if (consensusParams.forkNumber(nHeight) < 3) {
             if (!CheckBlockSignature(block))
                 return state.DoS(100, false, REJECT_INVALID, "bad-blk-sign", false, "bad block signature");
         } else if (block.IsProofOfStake()) {
@@ -3468,7 +3478,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
     }
 
     // Check if block is pos and created before the end of initlim.
-    if (nHeight <= consensusParams.TLRHeight + consensusParams.TLRInitLim && block.IsProofOfStake())
+    if ((consensusParams.forkNumber(nHeight) < 2) && block.IsProofOfStake())
         return state.Invalid(false, REJECT_INVALID, "pos-restriction-initlim", "adding pos block is restricted within initlim");
 
     // Check timestamp against prev
@@ -3717,11 +3727,10 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, CVali
         if (pindex->nChainWork < nMinimumChainWork) return true;
     }
 
-    if (block.IsNewestFormat() != (pindex->nHeight >= chainparams.GetConsensus().newProofHeight)) {
+    if (block.IsNewestFormat() != (chainparams.forkNumber(pindex->nHeight) == 3)) {
         return state.Invalid(false, REJECT_INVALID, "3fork-error", "AcceptBlock: block format does not match expected version");
     }
-    if (block.IsNewFormatBlock() != ((pindex->nHeight >= chainparams.GetConsensus().TLRHeight) && 
-                                     (pindex->nHeight < chainparams.GetConsensus().newProofHeight)))  {
+    if (block.IsNewFormatBlock() != (chainparams.forkNumber(pindex->nHeight) == 2)) {
         return state.Invalid(false, REJECT_INVALID, "2fork-error", "AcceptBlock: block format does not match expected version");
     }
 

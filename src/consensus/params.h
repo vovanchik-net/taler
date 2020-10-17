@@ -78,7 +78,6 @@ struct Params {
     int nLyra2ZHeight;
     int nSegwitHeight;
     int TLRHeight;
-    int TLRInitLim;
     arith_uint256 powLimitLegacy;
     int64_t nPowTargetSpacing (int nHeight) const {
         return nHeight >= TLRHeight ? (nPowTargetSpacingBegin / 5) : nPowTargetSpacingBegin;
@@ -104,6 +103,12 @@ struct Params {
     int64_t nNewDiffAdjustmentAlgorithmHeight;
 
     int newProofHeight;
+    int forkNumber (int nHeight) const {
+        if (nHeight >= newProofHeight) return 3;
+        if (nHeight >= TLRHeight) return 2;
+        if (nHeight >= nLyra2ZHeight) return 1;
+        return 0;
+    }
 };
 
 } // namespace Consensus

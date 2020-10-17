@@ -3125,8 +3125,7 @@ bool getCoinInfo (std::map<uint256, uint64_t>& cache, const COutPoint& out, uint
         Coin coin;
         if (pcoinsTip->GetCoin(out, coin) && (chainActive[coin.nHeight] != nullptr)) {
             const Consensus::Params& consensus = Params().GetConsensus();
-            if ((chainActive.Height() < consensus.newProofHeight) &&
-                (coin.nHeight <= Params().GetConsensus().TLRHeight + Params().GetConsensus().TLRInitLim)) return false;
+            if ((consensus.forkNumber(chainActive.Height()) == 2) && (consensus.forkNumber(coin.nHeight) < 2)) return false;
             correctCoin (out, coin, "getCoinInfo");
             uint64_t tmp = coin.nOffset; tmp <<= 32; tmp |= coin.nTime; 
             cache[out.hash] = tmp;
@@ -4631,9 +4630,10 @@ int CMerkleTx::GetBlocksToMaturity() const
         return 0;
     int chain_depth = GetDepthInMainChain();
     assert(chain_depth >= 0); // coinbase tx should not be conflicted
-    return std::max(0, (COINBASE_MATURITY+1) - chain_depth);
+    int maturity = COINBASE_MATURITY;
+    if (Params().forkNumber(chainActive.Height()) >= 3) maturity = 50;
+    return std::max(0, (maturity+1) - chain_depth);
 }
-
 
 bool CWalletTx::AcceptToMemoryPool(const CAmount& nAbsurdFee, CValidationState& state)
 {

@@ -1573,7 +1573,8 @@ bool static ProcessHeadersMessage(CNode *pfrom, CConnman *connman, const std::ve
 
 bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStream& vRecv, int64_t nTimeReceived, const CChainParams& chainparams, CConnman* connman, const std::atomic<bool>& interruptMsgProc, bool enable_bip61)
 {
-    LogPrint(BCLog::HTTP, "netget: %s (%u bytes) peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->GetId());
+    LogPrint(BCLog::NETDUMP, "ReceiveDump(peer=%d, size=%u): %s - %s\n", pfrom->GetId(), vRecv.size(),
+        SanitizeString(strCommand), HexStr(vRecv.begin(), vRecv.end()));
     LogPrint(BCLog::NET, "received: %s (%u bytes) peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->GetId());
     if (gArgs.IsArgSet("-dropmessagestest") && GetRand(gArgs.GetArg("-dropmessagestest", 0)) == 0)
     {
@@ -1831,7 +1832,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             // nodes)
             connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::SENDHEADERS));
         }
-        if (pfrom->nVersion >= SHORT_IDS_BLOCKS_VERSION) {
+        if (pfrom->nVersion == SHORT_IDS_BLOCKS_VERSION) {
             // Tell our peer we are willing to provide version 1 or 2 cmpctblocks
             // However, we do not request new block announcements using
             // cmpctblock messages.
@@ -1919,13 +1920,13 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         if (nCMPCTBLOCKVersion == 1 || ((pfrom->GetLocalServices() & NODE_WITNESS) && nCMPCTBLOCKVersion == 2)) {
             LOCK(cs_main);
             // fProvidesHeaderAndIDs is used to "lock in" version of compact blocks we send (fWantsCmpctWitness)
-            if (!State(pfrom->GetId())->fProvidesHeaderAndIDs) {
+            if (State(pfrom->GetId())->fProvidesHeaderAndIDs) {
                 State(pfrom->GetId())->fProvidesHeaderAndIDs = true;
                 State(pfrom->GetId())->fWantsCmpctWitness = nCMPCTBLOCKVersion == 2;
             }
             if (State(pfrom->GetId())->fWantsCmpctWitness == (nCMPCTBLOCKVersion == 2)) // ignore later version announces
                 State(pfrom->GetId())->fPreferHeaderAndIDs = fAnnounceUsingCMPCTBLOCK;
-            if (!State(pfrom->GetId())->fSupportsDesiredCmpctVersion) {
+            if (State(pfrom->GetId())->fSupportsDesiredCmpctVersion) {
                 if (pfrom->GetLocalServices() & NODE_WITNESS)
                     State(pfrom->GetId())->fSupportsDesiredCmpctVersion = (nCMPCTBLOCKVersion == 2);
                 else

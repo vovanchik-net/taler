@@ -431,7 +431,7 @@ public:
         if (nStatus & BLOCK_HAVE_UNDO)
             READWRITE(VARINT(nUndoPos));
 
-        if (nHeight >= Params().GetConsensus().newProofHeight) {
+        if (Params().forkNumber(nHeight) >= 3) {
             nFlags = 0;
             nStakeModifier = 0;
             hashProofOfStake = uint256();
@@ -439,7 +439,7 @@ public:
         } else {    
             READWRITE(nFlags);
             READWRITE(nStakeModifier);
-            if (!Params().isLegacyBlock(nHeight)) {
+            if (Params().forkNumber(nHeight) >= 2) {
                 if (IsProofOfStake()) {
                     READWRITE(hashProofOfStake);
                 } else if (ser_action.ForRead()) {

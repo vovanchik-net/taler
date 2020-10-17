@@ -53,7 +53,7 @@ const std::string CLIENT_NAME("Taler");
     "v" DO_STRINGIZE(maj) "." DO_STRINGIZE(min) "." DO_STRINGIZE(rev) "." DO_STRINGIZE(build) "-" DO_STRINGIZE(suffix)
 
 #define BUILD_DESC_FROM_COMMIT(maj, min, rev, build, commit) \
-    "v" DO_STRINGIZE(maj) "." DO_STRINGIZE(min) "." DO_STRINGIZE(rev) "." DO_STRINGIZE(build) " RC6"
+    "v" DO_STRINGIZE(maj) "." DO_STRINGIZE(min) "." DO_STRINGIZE(rev) "." DO_STRINGIZE(build)
 
 #define BUILD_DESC_FROM_UNKNOWN(maj, min, rev, build) \
     "v" DO_STRINGIZE(maj) "." DO_STRINGIZE(min) "." DO_STRINGIZE(rev) "." DO_STRINGIZE(build)
@@ -72,9 +72,9 @@ const std::string CLIENT_BUILD(BUILD_DESC CLIENT_VERSION_SUFFIX);
 
 static std::string FormatVersion(int nVersion)
 {
-    if (nVersion % 100 == 0)
-        return strprintf("%d.%d.%d", nVersion / 1000000, (nVersion / 10000) % 100, (nVersion / 100) % 100);
-    else
+//    if (nVersion % 100 == 0)
+//        return strprintf("%d.%d.%d", nVersion / 1000000, (nVersion / 10000) % 100, (nVersion / 100) % 100);
+//    else
         return strprintf("%d.%d.%d.%d", nVersion / 1000000, (nVersion / 10000) % 100, (nVersion / 100) % 100, nVersion % 100);
 }
 

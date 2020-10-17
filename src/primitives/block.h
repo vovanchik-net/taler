@@ -61,7 +61,7 @@ public:
         READWRITE(nBits);
         READWRITE(nNonce);
         if (IsNewestFormat()) {
-            nFlags = 0;
+            if (ser_action.ForRead()) nFlags = 0;
         } else if (!(s.GetVersion() & SERIALIZE_BLOCK_LEGACY)) {
             READWRITE(nFlags);
         } else if ((s.GetType() & SER_GETHASH) && (nFlags & BLOCK_PROOF_OF_STAKE)) {
@@ -154,7 +154,9 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITEAS(CBlockHeader, *this);
         READWRITE(vtx);
-        if (IsProofOfStake() && IsNewFormatBlock()) {
+        if (s.GetVersion() & SERIALIZE_BLOCK_LEGACY) {
+            // nothing
+        } else if (IsProofOfStake() && !IsNewestFormat()) {
             READWRITE(vchBlockSig);
         } else if (ser_action.ForRead()) {
             vchBlockSig.clear();
