@@ -1,4 +1,5 @@
 // Copyright (c) 2018 The Bitcoin Core developers
+// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,7 +17,6 @@
 #include <netaddress.h>
 #include <netbase.h>
 #include <policy/feerate.h>
-#include <policy/fees.h>
 #include <policy/policy.h>
 #include <primitives/block.h>
 #include <rpc/server.h>
@@ -195,11 +195,7 @@ class NodeImpl : public Node
     CAmount getMaxTxFee() override { return ::maxTxFee; }
     CFeeRate estimateSmartFee(int num_blocks, bool conservative, int* returned_target = nullptr) override
     {
-        FeeCalculation fee_calc;
-        CFeeRate result = ::feeEstimator.estimateSmartFee(num_blocks, &fee_calc, conservative);
-        if (returned_target) {
-            *returned_target = fee_calc.returnedTarget;
-        }
+        CFeeRate result = GetMinimumFeeRate(::mempool);
         return result;
     }
     CFeeRate getDustRelayFee() override { return ::dustRelayFee; }

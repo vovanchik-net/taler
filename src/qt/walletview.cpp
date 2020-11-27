@@ -1,4 +1,5 @@
 // Copyright (c) 2011-2018 The Bitcoin Core developers
+// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,6 +22,8 @@
 
 #include <interfaces/node.h>
 #include <ui_interface.h>
+
+#include <qt/coinsview.h>
 
 #include <QAction>
 #include <QActionGroup>
@@ -54,6 +57,12 @@ WalletView::WalletView(const PlatformStyle *_platformStyle, QWidget *parent):
     vbox->addLayout(hbox_buttons);
     transactionsPage->setLayout(vbox);
 
+    coinsPage = new QWidget(this);
+    QVBoxLayout *vboxCoins = new QVBoxLayout();
+    coinsView = new CoinsView(this);
+    vboxCoins->addWidget(coinsView);
+    coinsPage->setLayout(vboxCoins);
+
     receiveCoinsPage = new ReceiveCoinsDialog(platformStyle);
     sendCoinsPage = new SendCoinsDialog(platformStyle);
 
@@ -62,6 +71,7 @@ WalletView::WalletView(const PlatformStyle *_platformStyle, QWidget *parent):
 
     addWidget(overviewPage);
     addWidget(transactionsPage);
+    addWidget(coinsPage);
     addWidget(receiveCoinsPage);
     addWidget(sendCoinsPage);
 
@@ -126,6 +136,7 @@ void WalletView::setWalletModel(WalletModel *_walletModel)
 
     // Put transaction list in tabs
     transactionView->setModel(_walletModel);
+    coinsView->setModel(_walletModel);
     overviewPage->setWalletModel(_walletModel);
     receiveCoinsPage->setModel(_walletModel);
     sendCoinsPage->setModel(_walletModel);
@@ -184,6 +195,11 @@ void WalletView::gotoOverviewPage()
 void WalletView::gotoHistoryPage()
 {
     setCurrentWidget(transactionsPage);
+}
+
+void WalletView::gotoCoinsPage()
+{
+    setCurrentWidget(coinsPage);
 }
 
 void WalletView::gotoReceiveCoinsPage()

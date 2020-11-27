@@ -1,4 +1,5 @@
 // Copyright (c) 2011-2018 The Bitcoin Core developers
+// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,7 +15,6 @@
 #include <qt/clientmodel.h>
 #include <qt/guiconstants.h>
 #include <qt/intro.h>
-#include <qt/paymentrequestplus.h>
 #include <qt/guiutil.h>
 
 #include <clientversion.h>

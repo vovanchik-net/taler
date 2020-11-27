@@ -1,4 +1,5 @@
 // Copyright (c) 2018 The Bitcoin Core developers
+// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,7 +11,6 @@
 #include <interfaces/handler.h>
 #include <net.h>
 #include <policy/feerate.h>
-#include <policy/fees.h>
 #include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <script/ismine.h>
@@ -371,6 +371,11 @@ public:
         LOCK2(::cs_main, m_wallet.cs_wallet);
         return m_wallet.IsMine(txout);
     }
+    bool txoutIsSpent (const uint256& hash, unsigned int n) const  override
+    {
+        LOCK2(::cs_main, m_wallet.cs_wallet);
+        return m_wallet.IsSpent(hash, n);
+    }
     CAmount getDebit(const CTxIn& txin, isminefilter filter) override
     {
         LOCK2(::cs_main, m_wallet.cs_wallet);
@@ -411,18 +416,11 @@ public:
         }
         return result;
     }
-    CAmount getRequiredFee(unsigned int tx_bytes) override { return GetRequiredFee(m_wallet, tx_bytes); }
+    CAmount getRequiredFee(unsigned int tx_bytes) override { return GetRequiredFee(tx_bytes); }
     CAmount getMinimumFee(unsigned int tx_bytes,
-        const CCoinControl& coin_control,
-        int* returned_target,
-        FeeReason* reason) override
+        const CCoinControl& coin_control) override
     {
-        FeeCalculation fee_calc;
-        CAmount result;
-        result = GetMinimumFee(m_wallet, tx_bytes, coin_control, ::mempool, ::feeEstimator, &fee_calc);
-        if (returned_target) *returned_target = fee_calc.returnedTarget;
-        if (reason) *reason = fee_calc.reason;
-        return result;
+        return GetMinimumFee(tx_bytes, coin_control, ::mempool);
     }
     unsigned int getConfirmTarget() override { return m_wallet.m_confirm_target; }
     bool hdEnabled() override { return m_wallet.IsHDEnabled(); }

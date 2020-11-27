@@ -11,17 +11,6 @@
 /**
  * CChain implementation
  */
-void CChain::SetTip(CBlockIndex *pindex) {
-    if (pindex == nullptr) {
-        vChain.clear();
-        return;
-    }
-    vChain.resize(pindex->nHeight + 1);
-    while (pindex && vChain[pindex->nHeight] != pindex) {
-        vChain[pindex->nHeight] = pindex;
-        pindex = pindex->pprev;
-    }
-}
 
 CBlockLocator CChain::GetLocator(const CBlockIndex *pindex) const {
     int nStep = 1;
@@ -37,13 +26,7 @@ CBlockLocator CChain::GetLocator(const CBlockIndex *pindex) const {
             break;
         // Exponentially larger steps back, plus the genesis block.
         int nHeight = std::max(pindex->nHeight - nStep, 0);
-        if (Contains(pindex)) {
-            // Use O(1) CChain index if possible.
-            pindex = (*this)[nHeight];
-        } else {
-            // Otherwise, use O(log n) skiplist.
-            pindex = pindex->GetAncestor(nHeight);
-        }
+        pindex = pindex->GetAncestor(nHeight);
         if (vHave.size() > 10)
             nStep *= 2;
     }
@@ -62,6 +45,22 @@ const CBlockIndex *CChain::FindFork(const CBlockIndex *pindex) const {
     return pindex;
 }
 
+CBlockIndex* CChain::FindFork(const CBlockLocator& locator) const {
+    // Find the latest block common to locator and chain - we expect that
+    // locator.vHave is sorted descending by height.
+    for (const uint256& hash : locator.vHave) {
+        CBlockIndex* pindex = LookupBlockIndex(hash);
+        if (pindex) {
+            if (Contains(pindex))
+                return pindex;
+            if (pindex->GetAncestor(Height()) == pBestBlock) {
+                return pBestBlock;
+            }
+        }
+    }
+    return Genesis();
+}
+
 CBlockIndex* CChain::FindEarliestAtLeast(int64_t nTime) const
 {
     if ((Genesis() == nullptr) || (Genesis()->GetBlockTime() > nTime)) return nullptr;
@@ -70,9 +69,9 @@ CBlockIndex* CChain::FindEarliestAtLeast(int64_t nTime) const
     int hiHeight = Height();
     while (loHeight < hiHeight) {
         int mHeight = (loHeight + hiHeight) / 2;
-        if (vChain[mHeight]->GetBlockTime() < nTime) { loHeight = mHeight; } else { hiHeight = mHeight; }
+        if ((*this)[mHeight]->GetBlockTime() < nTime) { loHeight = mHeight; } else { hiHeight = mHeight; }
     }
-    return vChain[hiHeight];
+    return (*this)[hiHeight];
 }
 
 /** Turn the lowest '1' bit in the binary representation of a number into a '0'. */

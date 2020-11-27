@@ -1,4 +1,5 @@
 // Copyright (c) 2018 The Bitcoin Core developers
+// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -25,7 +26,6 @@ class CCoinControl;
 class CFeeRate;
 class CKey;
 class CWallet;
-enum class FeeReason;
 enum class OutputType;
 struct CRecipient;
 
@@ -207,6 +207,8 @@ public:
     //! Return whether transaction output belongs to wallet.
     virtual isminetype txoutIsMine(const CTxOut& txout) = 0;
 
+    virtual bool txoutIsSpent (const uint256& hash, unsigned int n) const = 0; 
+
     //! Return debit amount if transaction input belongs to wallet.
     virtual CAmount getDebit(const CTxIn& txin, isminefilter filter) = 0;
 
@@ -226,9 +228,7 @@ public:
 
     //! Get minimum fee.
     virtual CAmount getMinimumFee(unsigned int tx_bytes,
-        const CCoinControl& coin_control,
-        int* returned_target,
-        FeeReason* reason) = 0;
+        const CCoinControl& coin_control) = 0;
 
     //! Get tx confirm target.
     virtual unsigned int getConfirmTarget() = 0;

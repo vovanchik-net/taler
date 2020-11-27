@@ -542,7 +542,7 @@ void POWMinerThread (int POWIndex) {
             arith_uint256 bnTarget;
             bnTarget.SetCompact (pblock->nBits, &fNegative, &fOverflow);
             const Consensus::Params& consensus = Params().GetConsensus();
-            int nHeight = chainActive.Tip()->nHeight + 1;
+            int nHeight = chainActive.Height() + 1;
             while ((nMaxTries > 0) && (UintToArith256(pblock->GetPoWHash(nHeight, consensus)) >= bnTarget)) {
                 pblock->nNonce++;
                 nMaxTries--;

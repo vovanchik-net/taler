@@ -1,4 +1,5 @@
 // Copyright (c) 2017-2018 The Bitcoin Core developers
+// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,7 +12,6 @@ class CWallet;
 class CWalletTx;
 class uint256;
 class CCoinControl;
-enum class FeeEstimateMode;
 
 namespace feebumper {
 

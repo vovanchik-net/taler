@@ -1,4 +1,5 @@
 // Copyright (c) 2011-2018 The Bitcoin Core developers
+// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,7 +7,6 @@
 #define BITCOIN_WALLET_COINCONTROL_H
 
 #include <policy/feerate.h>
-#include <policy/fees.h>
 #include <primitives/transaction.h>
 #include <wallet/wallet.h>
 
@@ -34,8 +34,6 @@ public:
     boost::optional<bool> m_signal_bip125_rbf;
     //! Avoid partial use of funds sent to a given address
     bool m_avoid_partial_spends;
-    //! Fee estimation mode to control arguments to estimateSmartFee
-    FeeEstimateMode m_fee_mode;
 
     CCoinControl()
     {

@@ -139,7 +139,6 @@ BITCOIN_CORE_H = \
   noui.h \
   outputtype.h \
   policy/feerate.h \
-  policy/fees.h \
   policy/policy.h \
   policy/rbf.h \
   pow.h \
@@ -230,7 +229,6 @@ libbitcoin_server_a_SOURCES = \
   net_processing.cpp \
   noui.cpp \
   outputtype.cpp \
-  policy/fees.cpp \
   policy/policy.cpp \
   policy/rbf.cpp \
   pow.cpp \
@@ -575,10 +573,6 @@ if HARDEN
 	@echo "Checking binary security..."
 	$(AM_V_at) READELF=$(READELF) OBJDUMP=$(OBJDUMP) $(top_srcdir)/contrib/devtools/security-check.py < $(bin_PROGRAMS)
 endif
-
-%.pb.cc %.pb.h: %.proto
-	@test -f $(PROTOC)
-	$(AM_V_GEN) $(PROTOC) --cpp_out=$(@D) --proto_path=$(<D) $<
 
 if EMBEDDED_LEVELDB
 include Makefile.leveldb.include

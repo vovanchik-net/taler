@@ -1,4 +1,5 @@
 // Copyright (c) 2018 The Bitcoin Core developers
+// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,6 +19,5 @@ void CCoinControl::SetNull()
     fOverrideFeeRate = false;
     m_confirm_target.reset();
     m_signal_bip125_rbf.reset();
-    m_fee_mode = FeeEstimateMode::UNSET;
 }
 
