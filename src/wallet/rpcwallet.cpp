@@ -4789,7 +4789,7 @@ UniValue listminting(const JSONRPCRequest& request) {
     int64_t minAge = Params().GetConsensus().nStakeMinAge / DAY;
 
     std::vector<COutput> vCoins;
-    pwallet->AvailableCoins(vCoins, true, nullptr, 0, 0, MAX_MONEY, MAX_MONEY, 0, 1);
+    pwallet->AvailableCoins(vCoins, true, nullptr, 0, MAX_MONEY, MAX_MONEY, 0, 1);
 
     UniValue obj(UniValue::VOBJ);
     obj.push_back(Pair("TotalCoinWithZERO", vCoins.size()));
@@ -4801,16 +4801,12 @@ UniValue listminting(const JSONRPCRequest& request) {
             continue;
         }
 
-        if (nCount != 0 && ret.size() >= (size_t)nCount) {
+        if (nCount != 0 && ret.size() > (size_t)nCount) {
             break;
         }
 
-        if (nCount != 0 && ret.size() >= (size_t)nCount) {
-            break;
-        }
-
-        const CBlockIndex *pindex = nullptr;
-        out.tx->GetDepthInMainChain(pindex);
+        const CBlockIndex *pindex = LookupBlockIndex(out.tx->hashBlock);
+        if (!pindex || !chainActive.Contains(pindex)) pindex = nullptr;
 
         if (!pindex)
             continue;
@@ -4849,7 +4845,7 @@ UniValue listminting(const JSONRPCRequest& request) {
         obj.push_back(Pair("amount",                    ValueFromAmount(nValue)));
         obj.push_back(Pair("status",                    status));
         obj.push_back(Pair("age-in-day",                ((GetAdjustedTime() - nTime) / DAY)));
-//        obj.push_back(Pair("coin-day-weight",           coinAge));
+        obj.push_back(Pair("coin-day-weight",           coinAge));
 //        obj.push_back(Pair("minting-probability-10min", CalculateMintingProbabilityWithinPeriod(nBits, 10, nValue, nTime)));
 //        obj.push_back(Pair("minting-probability-24h",   CalculateMintingProbabilityWithinPeriod(nBits, 60*24, nValue, nTime)));
 //        obj.push_back(Pair("minting-probability-30d",   CalculateMintingProbabilityWithinPeriod(nBits, 60*24*30, nValue, nTime)));

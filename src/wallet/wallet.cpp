@@ -1264,8 +1264,8 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const CBlockIndex *pin
     if ((pindex == nullptr) && (posInBlock == 0)) {
         auto it = mapWallet.find(ptx->GetHash());
         if (it != mapWallet.end()) {
-            it->second.fInMempool = false;
-            AbandonTransaction (ptx->GetHash());
+            it->second.setAbandoned();
+            NotifyTransactionChanged(this, ptx->GetHash(), CT_UPDATED);
         }
         return;
     }
@@ -1322,18 +1322,14 @@ void CWallet::BlockConnected(const std::shared_ptr<const CBlock>& pblock, const 
     if (GetAdjustedTime() - last > 60) {
         last = GetAdjustedTime();
         for (std::map<uint256, CWalletTx>::iterator it = mapWallet.begin(); it != mapWallet.end(); ++it) {
-            CWalletTx& wtx = (*it).second;
-            if (wtx.GetDepthInMainChain() > 0) continue;
-            if (wtx.nTimeReceived > GetAdjustedTime() - 600) continue;
-            {
-                LOCK(cs_wallet);
-                mapWallet.erase(it);
-            }
             const uint256& hash = (*it).first;
-            WalletBatch(*database).EraseTx(hash);
-            NotifyTransactionChanged(this, hash, CT_DELETED);
-            WalletLogPrintf("clear orphan hash=%s\n", hash.ToString());
-            break;
+            CWalletTx& wtx = (*it).second;
+            if ((wtx.GetDepthInMainChain() <= 0) && (!wtx.isAbandoned()) &&
+                    (!wtx.fInMempool) && (GetAdjustedTime() - wtx.nTimeReceived > 15*60)) {
+                wtx.setAbandoned();
+                NotifyTransactionChanged(this, wtx.GetHash(), CT_UPDATED);
+                WalletLogPrintf("clean orphan hash=%s\n", hash.ToString());
+            }
         }
     }
 }
@@ -2311,7 +2307,7 @@ CAmount CWallet::GetAvailableBalance(const CCoinControl* coinControl) const
     return balance;
 }
 
-void CWallet::AvailableCoins(std::vector<COutput> &vCoins, bool fOnlySafe, const CCoinControl *coinControl, unsigned int nSpendTime, const CAmount &nMinimumAmount, const CAmount &nMaximumAmount, const CAmount &nMinimumSumAmount, const uint64_t nMaximumCount, const int nMinDepth, const int nMaxDepth) const
+void CWallet::AvailableCoins(std::vector<COutput> &vCoins, bool fOnlySafe, const CCoinControl *coinControl, const CAmount &nMinimumAmount, const CAmount &nMaximumAmount, const CAmount &nMinimumSumAmount, const uint64_t nMaximumCount, const int nMinDepth, const int nMaxDepth) const
 {
     AssertLockHeld(cs_main);
     AssertLockHeld(cs_wallet);
@@ -2330,12 +2326,10 @@ void CWallet::AvailableCoins(std::vector<COutput> &vCoins, bool fOnlySafe, const
         if (pcoin->IsCoinBase() && pcoin->GetBlocksToMaturity() > 0)
             continue;
 
-        const CBlockIndex* blockIndex = nullptr;
-        int nDepth = pcoin->GetDepthInMainChain(blockIndex);
+        int nDepth = pcoin->GetDepthInMainChain();
         if (nDepth < 0)
             continue;
-        if (nSpendTime > 0 && (!blockIndex || blockIndex->GetBlockTime() > nSpendTime))
-            continue;  // pos: timestamp must not exceed spend time
+
         // We should not consider coins which aren't at least in our mempool
         // It's possible for these to be conflicted via ancestors which we may never be able to detect
         if (nDepth == 0 && !pcoin->InMempool())
@@ -3162,7 +3156,7 @@ bool CWallet::CreateCoinStake (CBlockHeader& header, int64_t nSearchInterval, CM
     int32_t nCoinStakeTime = header.nTime;
     // Choose coins to use
     std::vector<COutput> vCoins;
-    AvailableCoins(vCoins, true, nullptr, nCoinStakeTime, 0);
+    AvailableCoins(vCoins, true, nullptr, 0);
     LogPrint(BCLog::SELECTCOINS, "        Total select coin = %d\n", vCoins.size());
     CAmount nCredit = 0;
     static std::map<uint256, uint64_t> cachedCoins; 
@@ -4621,7 +4615,7 @@ void CMerkleTx::SetMerkleBranch(const CBlockIndex* pindex, int posInBlock)
     nIndex = posInBlock;
 }
 
-int CMerkleTx::GetDepthInMainChain (const CBlockIndex* &pindexRet) const
+int CMerkleTx::GetDepthInMainChain() const
 {
     if (hashUnset())
         return 0;
@@ -4633,7 +4627,6 @@ int CMerkleTx::GetDepthInMainChain (const CBlockIndex* &pindexRet) const
     if (!pindex || !chainActive.Contains(pindex))
         return 0;
 
-    pindexRet = pindex;
     return ((nIndex == -1) ? (-1) : 1) * (chainActive.Height() - pindex->nHeight + 1);
 }
 

@@ -3,7 +3,7 @@ AC_PREREQ([2.60])
 define(_CLIENT_VERSION_MAJOR, 0)
 define(_CLIENT_VERSION_MINOR, 17)
 define(_CLIENT_VERSION_REVISION, 2)
-define(_CLIENT_VERSION_BUILD, 1)
+define(_CLIENT_VERSION_BUILD, 2)
 define(_CLIENT_VERSION_IS_RELEASE, true)
 define(_COPYRIGHT_YEAR, 2020)
 define(_COPYRIGHT_HOLDERS,[Uladzimir (https://t.me/vovanchik_net) for %s])
@@ -397,7 +397,7 @@ AC_ARG_WITH([utils],
   [AS_HELP_STRING([--with-utils],
   [build taler-cli taler-tx (default=yes)])],
   [build_bitcoin_utils=$withval],
-  [build_bitcoin_utils=no])
+  [build_bitcoin_utils=yes])
 
 AC_ARG_WITH([libs],
   [AS_HELP_STRING([--with-libs],

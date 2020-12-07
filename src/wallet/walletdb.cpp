@@ -14,6 +14,7 @@
 #include <sync.h>
 #include <util.h>
 #include <utiltime.h>
+#include <timedata.h>
 #include <wallet/wallet.h>
 
 #include <atomic>
@@ -237,6 +238,7 @@ public:
     bool fAnyUnordered;
     int nFileVersion;
     std::vector<uint256> vWalletUpgrade;
+    std::vector<uint256> vWalletClear;
 
     CWalletScanState() {
         nKeys = nCKeys = nWatchKeys = nKeyMeta = m_unknown_records = 0;
@@ -300,7 +302,11 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             if (wtx.nOrderPos == -1)
                 wss.fAnyUnordered = true;
 
-            pwallet->LoadToWallet(wtx);
+            if ((wtx.GetDepthInMainChain() <= 0) && (GetAdjustedTime() - wtx.nTimeReceived > 60*60)) {
+                wss.vWalletClear.push_back(hash);
+            } else {
+                pwallet->LoadToWallet(wtx);
+            }
         }
         else if (strType == "acentry")
         {
@@ -613,6 +619,11 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 
     for (uint256 hash : wss.vWalletUpgrade)
         WriteTx(pwallet->mapWallet.at(hash));
+
+    for (uint256 hash : wss.vWalletClear) {
+        pwallet->WalletLogPrintf("clear orphan tx (hash = %s)\n", hash.ToString());
+        EraseTx(hash);
+    }
 
     // Rewrite encrypted wallets of versions 0.4.0 and 0.5.0rc:
     if (wss.fIsEncrypted && (wss.nFileVersion == 40000 || wss.nFileVersion == 50000))
