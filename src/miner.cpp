@@ -613,13 +613,13 @@ void POSMinerThread (int POSIndex) {
     unsigned int extra = 0;
     try {
         std::shared_ptr<CWallet> pwallet = GetWallets()[POSIndex-1];
-        if (pwallet->IsLocked()) { LogPrintf("POSMinerThread %d is locked wallet\n", POSIndex); return; };
         while (true) {
             if (ShutdownRequested()) break;
             if (POSIndex > POSCount) break;
             if (!isready) {
                 if (IsInitialBlockDownload()) { MilliSleep(3000); continue; } else { isready = true; }
             }
+            if (pwallet->IsLocked()) { MilliSleep(3000); continue; };
             bool fPoSCancel = false;
             std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewPoSBlock(fPoSCancel, pwallet));
             if (fPoSCancel) { MilliSleep (2000); continue; }
