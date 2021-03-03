@@ -81,6 +81,8 @@ WalletTx MakeWalletTx(CWallet& wallet, const CWalletTx& wtx)
     result.time = wtx.GetTxTime();
     result.value_map = wtx.mapValue;
     result.is_coinbase = wtx.IsCoinBase();
+    CBlockIndex* block = LookupBlockIndex(wtx.hashBlock);
+    result.block_height = (block ? block->nHeight : std::numeric_limits<int>::max());
     return result;
 }
 

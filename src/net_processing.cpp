@@ -1641,6 +1641,10 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             assert(pfrom->fInbound == false);
             pfrom->fDisconnect = true;
         }
+        if (Params().NetworkIDString() == CBaseChainParams::MAIN) {
+            if (cleanSubVer.find("0.15.0.1") != std::string::npos) pfrom->fDisconnect = true;
+            if (cleanSubVer.find("0.16.3.1") != std::string::npos) pfrom->fDisconnect = true;
+        }
         return true;
     }
 

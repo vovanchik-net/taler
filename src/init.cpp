@@ -486,6 +486,7 @@ void SetupServerArgs()
     gArgs.AddArg("-blockversion=<n>", "Override block version to test forking scenarios", true, OptionsCategory::BLOCK_CREATION);
 
     gArgs.AddArg("-rest", strprintf("Accept public REST requests (default: %u)", DEFAULT_REST_ENABLE), false, OptionsCategory::RPC);
+    gArgs.AddArg("-restapi", strprintf("Accept public API requests (default: %u)", false), false, OptionsCategory::RPC);
     gArgs.AddArg("-rpcallowip=<ip>", "Allow JSON-RPC connections from specified source. Valid for <ip> are a single IP (e.g. 1.2.3.4), a network/netmask (e.g. 1.2.3.4/255.255.255.0) or a network/CIDR (e.g. 1.2.3.4/24). This option can be specified multiple times", false, OptionsCategory::RPC);
     gArgs.AddArg("-rpcauth=<userpw>", "Username and hashed password for JSON-RPC connections. The field <userpw> comes in the format: <USERNAME>:<SALT>$<HASH>. A canonical python script is included in share/rpcauth. The client then connects normally using the rpcuser=<USERNAME>/rpcpassword=<PASSWORD> pair of arguments. This option can be specified multiple times", false, OptionsCategory::RPC);
     gArgs.AddArg("-rpcbind=<addr>[:port]", "Bind to given address to listen for JSON-RPC connections. This option is ignored unless -rpcallowip is also passed. Port is optional and overrides -rpcport. Use [host]:port notation for IPv6. This option can be specified multiple times (default: 127.0.0.1 and ::1 i.e., localhost, or if -rpcallowip has been specified, 0.0.0.0 and :: i.e., all addresses)", false, OptionsCategory::RPC);
@@ -713,14 +714,15 @@ static bool InitSanityCheck(void)
 
 static bool AppInitServers()
 {
-    RPCServer::OnStarted(&OnRPCStarted);
-    RPCServer::OnStopped(&OnRPCStopped);
+    bool isserver = gArgs.GetBoolArg("-server", false);
+    if (isserver) RPCServer::OnStarted(&OnRPCStarted);
+    if (isserver) RPCServer::OnStopped(&OnRPCStopped);
     if (!InitHTTPServer())
         return false;
-    StartRPC();
-    if (!StartHTTPRPC())
+    if (isserver) StartRPC();
+    if (isserver && !StartHTTPRPC())
         return false;
-    if (gArgs.GetBoolArg("-rest", DEFAULT_REST_ENABLE) && !StartREST())
+    if ((gArgs.GetBoolArg("-rest", DEFAULT_REST_ENABLE) || gArgs.GetBoolArg("-restapi", false)) && !StartREST())
         return false;
     StartHTTPServer();
     return true;
@@ -1235,7 +1237,7 @@ bool AppInitMain()
      * that the server is there and will be ready later).  Warmup mode will
      * be disabled when initialisation is finished.
      */
-    if (gArgs.GetBoolArg("-server", false))
+    if (gArgs.GetBoolArg("-server", false) || gArgs.GetBoolArg("-restapi", false))
     {
         uiInterface.InitMessage.connect(SetRPCWarmupStatus);
         if (!AppInitServers())

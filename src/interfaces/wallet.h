@@ -341,6 +341,7 @@ struct WalletTx
     int64_t time;
     std::map<std::string, std::string> value_map;
     bool is_coinbase;
+    int block_height;
 };
 
 //! Updated transaction status.

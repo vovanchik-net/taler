@@ -323,4 +323,86 @@ void AddCoins(CCoinsViewCache& cache, const CTransaction& tx, int nHeight, uint3
 // lookups to database, so it should be used with care.
 const Coin& AccessByTxid(const CCoinsViewCache& cache, const uint256& txid);
 
+struct CAddressKey {
+    CScript script;
+    COutPoint out;
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(script);
+        READWRITE(out);
+    }
+
+    CAddressKey(const CScript& pscript, const COutPoint& pout) {
+        script = pscript;
+        out = pout;
+    }
+
+    CAddressKey() {
+        SetNull();
+    }
+
+    void SetNull() {
+        script.clear();
+        out.SetNull();
+    }
+
+    bool IsNull() const {
+        return out.IsNull();
+    }
+};
+
+struct CAddressValue {
+    CAmount value;
+    uint32_t height;
+    uint256 spend_hash;
+    uint32_t spend_n;
+    uint32_t spend_height;
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(value);
+        READWRITE(height);
+        READWRITE(spend_height);
+        if (spend_height > 0) {
+            READWRITE(spend_hash);
+            READWRITE(spend_n);
+        }
+    }
+
+    CAddressValue(CAmount pvalue, uint32_t pheight) {
+        value = pvalue;
+        height = pheight;
+        spend_height = 0;
+        spend_hash.SetNull();
+        spend_n = 0;
+    }
+
+    CAddressValue() {
+        SetNull();
+    }
+
+    void addSpend (const uint256& pspend_hash, uint32_t pspend_n, uint32_t pspend_height) {
+        spend_hash = pspend_hash;
+        spend_n = pspend_n;
+        spend_height = pspend_height;
+    }
+
+    void SetNull() {
+        value = 0;
+        height = 0;
+        spend_height = 0;
+        spend_hash.SetNull();
+        spend_n = 0;
+    }
+
+    bool IsNull() const {
+        return (height == 0);
+    }
+};
+
 #endif // BITCOIN_COINS_H

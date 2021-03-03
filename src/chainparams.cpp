@@ -82,7 +82,7 @@ public:
         consensus.nNewDiffAdjustmentAlgorithmHeight = 250000;
         consensus.nPowAveragingWindowv2 = 120;
         
-        consensus.newProofHeight = 2500000;
+        consensus.newProofHeight = 3000000;
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork =
@@ -118,7 +118,7 @@ public:
         vSeeds.clear();
         vSeeds.emplace_back("dnsseed.talercrypto.com");
         vSeeds.emplace_back("dnsseed.mikalair.me");
-        vSeeds.emplace_back("taler.vovanchik.net");
+        vSeeds.emplace_back("talerseed.vovanchik.net");
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 65);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 50);

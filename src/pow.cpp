@@ -184,7 +184,7 @@ GetNextWorkRequiredForPow(const CBlockIndex *pindexLast, const CBlockHeader *pbl
 uint32_t GetNextWorkRequired(const CBlockIndex *pindexLast, const CBlockHeader *pblock, const Consensus::Params &params) {
     assert(pindexLast != nullptr);
     bool fProofOfStake = pblock->IsProofOfStake();
-    if (params.forkNumber(pindexLast->nHeight) < 3)
+    if (params.forkNumber(pindexLast->nHeight + 1) < 3)
         return fProofOfStake ? GetNextWorkRequiredForPos(pindexLast, pblock, params) :
                                GetNextWorkRequiredForPow(pindexLast, pblock, params);
     //v1.7 Calc difficulty PoW & PoS. Copyright by Uladzimir(https://t.me/vovanchik_net)

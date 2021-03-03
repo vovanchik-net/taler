@@ -1624,11 +1624,22 @@ DisconnectResult CChainState::DisconnectBlock(const CBlock& block, const CBlockI
         return DISCONNECT_FAILED;
     }
 
+    std::vector<CAddressKey> addressKey;
+    std::vector<std::pair<CAddressKey, CAddressValue>> addressKeyValue;
+
     // undo transactions in reverse order
     for (int i = block.vtx.size() - 1; i >= 0; i--) {
         const CTransaction &tx = *(block.vtx[i]);
         uint256 hash = tx.GetHash();
         bool is_coinbase = tx.IsCoinBase();
+
+        if (fTxIndex) {
+            for (unsigned int k = tx.vout.size(); k-- > 0;) {
+                const CTxOut &out = tx.vout[k];
+                if (out.scriptPubKey.IsUnspendable()) continue;
+                addressKey.push_back(CAddressKey(out.scriptPubKey, COutPoint(hash, k)));
+            }
+        }
 
         // Check that all outputs are available and match the outputs in the block itself
         // exactly.
@@ -1655,8 +1666,25 @@ DisconnectResult CChainState::DisconnectBlock(const CBlock& block, const CBlockI
                 int res = ApplyTxInUndo(std::move(txundo.vprevout[j]), view, out);
                 if (res == DISCONNECT_FAILED) return DISCONNECT_FAILED;
                 fClean = fClean && res != DISCONNECT_UNCLEAN;
+                if (fTxIndex) {
+                    const Coin &coin = view.AccessCoin(out);
+                    if (coin.out.scriptPubKey.IsUnspendable()) continue;
+                    addressKeyValue.push_back(std::make_pair(CAddressKey(coin.out.scriptPubKey, out), 
+                        CAddressValue(coin.out.nValue, coin.nHeight)));
+                }
             }
             // At this point, all of txundo.vprevout should have been moved out.
+        }
+    }
+
+    if (fTxIndex) {
+        if (!pblocktree->EraseAddress(addressKey)) {
+            AbortNode("Failed to delete address");
+            return DISCONNECT_FAILED;
+        }
+        if (!pblocktree->WriteAddress(addressKeyValue)) {
+            AbortNode("Failed to write address");
+            return DISCONNECT_FAILED;
         }
     }
 
@@ -2040,6 +2068,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     int64_t nSigOpsCost = 0;
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
     std::vector<PrecomputedTransactionData> txdata;
+    std::vector<std::pair<CAddressKey, CAddressValue>> addressKeyValue;
     txdata.reserve(block.vtx.size()); // Required so that pointers to individual PrecomputedTransactionData don't get invalidated
     CAmount posReward = 0;
     uint32_t tx_index_in_block = GetSizeOfCompactSize(block.vtx.size()) + CBlockHeader::NORMAL_SERIALIZE_SIZE;
@@ -2092,6 +2121,16 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
             }
         }
 
+        if (fTxIndex) {
+            for (size_t j = 0; j < tx.vin.size(); j++) {
+                const Coin& coin = view.AccessCoin(tx.vin[j].prevout);
+                if (coin.out.scriptPubKey.IsUnspendable()) continue;
+                CAddressValue addrval(coin.out.nValue, coin.nHeight);
+                addrval.addSpend (tx.GetHash(), j, pindex->nHeight);
+                addressKeyValue.push_back(std::make_pair(CAddressKey(coin.out.scriptPubKey, tx.vin[j].prevout), addrval));
+            }
+        }
+
         // GetTransactionSigOpCost counts 3 types of sigops:
         // * legacy (always)
         // * p2sh (when P2SH enabled in flags and excludes coinbase)
@@ -2110,6 +2149,15 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                 return error("ConnectBlock(): CheckInputs on %s failed with %s",
                     tx.GetHash().ToString(), FormatStateMessage(state));
             control.Add(vChecks);
+        }
+
+        if (fTxIndex) {
+            for (unsigned int k = 0; k < tx.vout.size(); k++) {
+                const CTxOut &out = tx.vout[k];
+                if (out.scriptPubKey.IsUnspendable()) continue;
+                addressKeyValue.push_back(std::make_pair(CAddressKey(out.scriptPubKey, COutPoint(tx.GetHash(), k)),
+                    CAddressValue(out.nValue, pindex->nHeight)));
+            }
         }
 
         CTxUndo undoDummy;
@@ -2159,6 +2207,13 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     if (!WriteTxIndexDataForBlock(block, state, pindex))
         return false;
 
+    if (fTxIndex) {
+        if (!pblocktree->WriteAddress(addressKeyValue)) {
+            AbortNode("Failed to write address");
+            return DISCONNECT_FAILED;
+        }
+    }
+
     assert(pindex->phashBlock);
     // add this block to the view's block chain
     view.SetBestBlock(pindex->GetBlockHash());
@@ -2176,12 +2231,13 @@ void correctCoin (const COutPoint &prevout, Coin& coin, std::string caller) {
     if ((coin.nTime != 0) && (coin.nOffset != 0)) return;
     CBlockIndex* pi = chainActive[coin.nHeight];
     if (pi == nullptr) return;
+    coin.nTime = pi->GetBlockTime();
+    if (Params().forkNumber(coin.nHeight) >= 3) return;
     CBlock block;
     if (!ReadBlockFromDisk(block, pi, Params().GetConsensus())) return;
     uint32_t tx_index_in_block = GetSizeOfCompactSize(block.vtx.size()) + CBlockHeader::NORMAL_SERIALIZE_SIZE; 
     for (const auto& tx : block.vtx) {
         if (tx->GetHash() == prevout.hash) {
-            coin.nTime = pi->GetBlockTime();
             coin.nOffset = tx_index_in_block;
             LogPrint (BCLog::SELECTCOINS, "Modify(%s): nOut=%s.%d nHeigth=%d nTime=%d nOffset=%d\n",
                 caller, prevout.hash.ToString(), prevout.n, coin.nHeight, coin.nTime, coin.nOffset);
@@ -2221,6 +2277,7 @@ bool CheckProofOfStake (const CBlockHeader& block, int height, const Consensus::
     bnTarget.SetCompact(block.nBits);
     CDataStream ss(SER_GETHASH, 0);
     if (params.forkNumber(height) >= 3) {
+        if ((block.nTime < time) || (block.nTime - time < params.nCoinAgeTick)) return false;
         bnTarget *= std::min((int)((block.nTime - time) / params.nCoinAgeTick), 99);
         bnTarget *= std::min((int)(value / COIN), 9999);
         ss << out.n << block.hashPrevBlock << out.hash << block.nTime << block.nBits << 0; 
@@ -2245,7 +2302,8 @@ bool CheckProofOfStake (const CBlockHeader& block, int height, const Consensus::
         LogPrint(BCLog::SELECTCOINS, "CheckProofOfStake(): using modifier 0x%016" PRIx64 " at height=%d\n", nStakeModifier, nStakeModifierHeight);
     }
     uint256 hash = Hash(ss.begin(), ss.end());
-    LogPrint(BCLog::SELECTCOINS, "CheckProofOfStake(): TimeBlockFrom=%u TimeTx=%u hash=%s\n", time, block.nTime, hash.ToString());
+    LogPrint(BCLog::SELECTCOINS, "CheckProofOfStake(): TimeDiff=%d, hash=%s, target=%s\n",
+        (block.nTime-time)/60, hash.ToString().substr(0,7), bnTarget.ToString().substr(0,7));
     if (UintToArith256(hash) > bnTarget) return false;
     if (hashProofOfStake) *hashProofOfStake = hash;
     return true;
@@ -3063,7 +3121,7 @@ CBlockIndex* CChainState::AddToBlockIndex(const CBlockHeader& block)
         pindexNew->pprev = pprev;
         pindexNew->nHeight = pindexNew->pprev->nHeight + 1;
         pindexNew->nPowHeight = pindexNew->pprev->nPowHeight;
-        if (!block.IsProofOfStake()) {
+        if (!block.IsProofOfStake() || block.IsNewestFormat()) {
             pindexNew->nPowHeight++;
         }        
         pindexNew->nFlags = block.nFlags;
@@ -3238,7 +3296,7 @@ CScript MakeCheckStakeScript (const CBlock& block) {
             ss << txin.nSequence;            
         }
         for (const auto& txout : block.vtx[0]->vout) {
-            if (!((txout.scriptPubKey.size() >= 38) &&
+            if (!((txout.scriptPubKey.size() == 38) &&
                     (txout.scriptPubKey[0] == OP_RETURN) && (txout.scriptPubKey[1] == 0x24) && (txout.scriptPubKey[2] == 0xaa) &&
                     (txout.scriptPubKey[3] == 0x21) && (txout.scriptPubKey[4] == 0xa9) && (txout.scriptPubKey[5] == 0xed)))
                 ss << txout;
@@ -3536,6 +3594,10 @@ static bool ContextualCheckBlock(const CBlock& block, CValidationState& state, c
                 return state.DoS(100, false, REJECT_INVALID, "unexpected-witness", true, strprintf("%s : unexpected witness data found", __func__));
             }
         }
+    } else if (consensusParams.forkNumber(nHeight) >= 3) {
+        bool exist = false;
+        for (const auto& tx : block.vtx) { if (tx->HasWitness()) { exist = true; } }
+        if (!exist) return state.DoS(100, false, REJECT_INVALID, "no-witness-data", true, strprintf("%s : no witness data found", __func__));
     }
 
     // After the coinbase witness reserved value and commitment are verified,
@@ -3777,7 +3839,7 @@ bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams,
     indexDummy.pprev = pindexPrev;
     indexDummy.nHeight = pindexPrev->nHeight + 1;
     indexDummy.phashBlock = &block_hash;
-    if (!block.IsProofOfStake())
+    if (!block.IsProofOfStake() || block.IsNewestFormat())
         indexDummy.nPowHeight = pindexPrev->nPowHeight + 1;
     else
         indexDummy.nPowHeight = pindexPrev->nPowHeight;

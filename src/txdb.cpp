@@ -24,6 +24,7 @@ static const char DB_COINS = 'c';
 static const char DB_BLOCK_FILES = 'f';
 static const char DB_TXINDEX = 't';
 static const char DB_BLOCK_INDEX = 'b';
+static const char DB_ADDRESS = 'a';
 
 static const char DB_BEST_BLOCK = 'B';
 static const char DB_HEAD_BLOCKS = 'H';
@@ -246,6 +247,42 @@ bool CBlockTreeDB::WriteTxIndex(const std::vector<std::pair<uint256, CDiskTxPos>
     for (std::vector<std::pair<uint256,CDiskTxPos> >::const_iterator it=vect.begin(); it!=vect.end(); it++)
         batch.Write(std::make_pair(DB_TXINDEX, it->first), it->second);
     return WriteBatch(batch);
+}
+
+// CScript, COutpoint  = value, height, spend_tx, spend_in, spend_height
+
+bool CBlockTreeDB::WriteAddress (const std::vector<std::pair<CAddressKey, CAddressValue>> &vec) {
+    CDBBatch batch(*this);
+    for (auto it : vec)
+        batch.Write(std::make_pair(DB_ADDRESS, it.first), it.second);
+    return WriteBatch(batch);
+}
+
+bool CBlockTreeDB::EraseAddress (const std::vector<CAddressKey> &vec) {
+    CDBBatch batch(*this);
+    for (auto it : vec)
+        batch.Erase(std::make_pair(DB_ADDRESS, it));
+    return WriteBatch(batch);
+}
+
+bool CBlockTreeDB::ReadAddress (const CScript& script, std::vector<std::pair<CAddressKey, CAddressValue>> &vec) {
+    std::unique_ptr<CDBIterator> pcursor(NewIterator());
+    pcursor->Seek(std::make_pair(DB_ADDRESS, CAddressKey(script, COutPoint())));
+    while (pcursor->Valid()) {
+        std::pair<char, CAddressKey> key;
+        if (pcursor->GetKey(key) && (key.first == DB_ADDRESS) && key.second.script == script) {
+            CAddressValue value;
+            if (pcursor->GetValue(value)) {
+                vec.push_back(std::make_pair(key.second, value));
+                pcursor->Next();
+            } else {
+                return error("failed to get address index value");
+            }
+        } else {
+            break;
+        }
+    }
+    return true;
 }
 
 bool CBlockTreeDB::WriteFlag(const std::string &name, bool fValue) {

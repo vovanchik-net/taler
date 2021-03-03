@@ -51,6 +51,8 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                 sub.idx = i; // vout index
                 sub.credit = txout.nValue;
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
+                CBlockIndex* pi = chainActive[wtx.block_height];
+                sub.isPoS = ((pi != nullptr) && pi->IsProofOfStake());
                 if (wtx.txout_address_is_mine[i])
                 {
                     // Received by Bitcoin Address
