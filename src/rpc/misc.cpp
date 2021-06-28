@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -336,12 +336,7 @@ UniValue getaddressbalance(const JSONRPCRequest& request)
     UniValue result(UniValue::VARR);
     for (auto it : info) {
         UniValue output(UniValue::VOBJ);
-        CTxDestination addr;
-        if (ExtractDestination(it.first.script, addr)) {
-            output.pushKV("address", EncodeDestination(addr));
-        } else {
-            output.pushKV("address", ScriptToAsmStr(it.first.script));
-        }
+        output.pushKV("address", it.first.GetAddr(true));
         output.pushKV("value", ValueFromAmount(it.second.value));
         output.pushKV("from", strprintf("[%d] %s:%d", it.second.height, it.first.out.hash.ToString(), it.first.out.n));
         if (it.second.spend_height == 0) {

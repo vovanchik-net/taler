@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -326,6 +326,7 @@ const Coin& AccessByTxid(const CCoinsViewCache& cache, const uint256& txid);
 struct CAddressKey {
     CScript script;
     COutPoint out;
+    CScript script2;
 
     ADD_SERIALIZE_METHODS;
 
@@ -333,10 +334,19 @@ struct CAddressKey {
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(script);
         READWRITE(out);
+        if (ser_action.ForRead()) {
+            if (s.size() == 0) {
+                script2.clear();
+            } else {
+                READWRITE(script2);
+            }
+        } else if (!script2.empty()) {
+            READWRITE(script2);
+        }
     }
 
     CAddressKey(const CScript& pscript, const COutPoint& pout) {
-        script = pscript;
+        SetScript (pscript);
         out = pout;
     }
 
@@ -344,9 +354,14 @@ struct CAddressKey {
         SetNull();
     }
 
+    void SetScript (const CScript& pscript);
+    CScript GetScript () { return script2.empty() ? script : script2; }
+    std::string GetAddr (bool asmifnull = false);
+
     void SetNull() {
         script.clear();
         out.SetNull();
+        script2.clear();
     }
 
     bool IsNull() const {

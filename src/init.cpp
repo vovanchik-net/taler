@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -497,6 +497,7 @@ void SetupServerArgs()
     gArgs.AddArg("-rpcservertimeout=<n>", strprintf("Timeout during HTTP requests (default: %d)", DEFAULT_HTTP_SERVER_TIMEOUT), true, OptionsCategory::RPC);
     gArgs.AddArg("-rpcthreads=<n>", strprintf("Set the number of threads to service RPC calls (default: %d)", DEFAULT_HTTP_THREADS), false, OptionsCategory::RPC);
     gArgs.AddArg("-rpcuser=<user>", "Username for JSON-RPC connections", false, OptionsCategory::RPC);
+    gArgs.AddArg("-rpcuserpass=<user:pass>", "Username & Password for JSON-RPC connections", false, OptionsCategory::RPC);
     gArgs.AddArg("-rpcworkqueue=<n>", strprintf("Set the depth of the work queue to service RPC calls (default: %d)", DEFAULT_HTTP_WORKQUEUE), true, OptionsCategory::RPC);
     gArgs.AddArg("-server", "Accept command line and JSON-RPC commands", false, OptionsCategory::RPC);
 
@@ -789,6 +790,24 @@ void InitParameterInteraction()
     if (gArgs.GetBoolArg("-whitelistforcerelay", DEFAULT_WHITELISTFORCERELAY)) {
         if (gArgs.SoftSetBoolArg("-whitelistrelay", true))
             LogPrintf("%s: parameter interaction: -whitelistforcerelay=1 -> setting -whitelistrelay=1\n", __func__);
+    }
+
+    if (gArgs.IsArgSet("-rpcuserpass")) {
+        std::vector<std::string> ss;
+        std::string params = gArgs.GetArg("-rpcuserpass", "");
+        boost::split(ss, params, boost::is_any_of(":")); 
+        if (ss.size() == 2) {
+            gArgs.SoftSetBoolArg("-server", true);
+            gArgs.SoftSetArg("-rpcuser", ss[0]);
+            gArgs.SoftSetArg("-rpcpassword", ss[1]);
+        } else {
+            LogPrintf("Ignore wrong rpcuserpass: must be user:pass< but found %s\n", params);
+        }
+    }
+
+    if (gArgs.GetBoolArg("-restapi", false)) {
+        gArgs.SoftSetArg("-rpcallowip", "0.0.0.0/0");
+        gArgs.SoftSetArg("-rpcallowip", "::/0");
     }
 
     // Warn if network-specific options (-addnode, -connect, etc) are

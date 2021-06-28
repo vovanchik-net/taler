@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -82,15 +82,13 @@ public:
         consensus.nNewDiffAdjustmentAlgorithmHeight = 250000;
         consensus.nPowAveragingWindowv2 = 120;
         
-        consensus.newProofHeight = 3000000;
-
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork =
-            uint256S("0x0000000000000000000000000000000000000000000000000135620a1169e577"); // 1200000
+            uint256S("0x00000000000000000000000000000000000000000000000001961f7d44698b6f"); // 1500000
 
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid =
-            uint256S("0xc3ac6fdf3f57851af1928925dcb6354cf42658c15824ab77d14a9e150bacc94e"); // 1200000
+            uint256S("0x514039919915738142da223ff83f131f0f7ac75c123d6ffa0cd9c23e40aeb328"); // 1500000
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -118,7 +116,8 @@ public:
         vSeeds.clear();
         vSeeds.emplace_back("dnsseed.talercrypto.com");
         vSeeds.emplace_back("dnsseed.mikalair.me");
-        vSeeds.emplace_back("talerseed.vovanchik.net");
+        vSeeds.emplace_back("talerseed1.vovanchik.net");
+        vSeeds.emplace_back("talerseed2.vovanchik.net");
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 65);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 50);
@@ -145,6 +144,7 @@ public:
                 {728634, uint256S("0x33e82f201a0b4074af53080d26c4092e6284bdead512b8c189b9c53526078d77")},
                 {734864, uint256S("0x11367f424327987636e48a1d8d81b34d92c397a48171a53ead697ac3037ec6f3")},
                 {1000000, uint256S("0x76928d1d18bc7e68fba6fdb66ad6145ee7312c98de76d95e353afc5d34e94750")},
+                {1500000, uint256S("0x514039919915738142da223ff83f131f0f7ac75c123d6ffa0cd9c23e40aeb328")},
             }
         };
 
@@ -187,8 +187,6 @@ public:
         consensus.TLRHeight = 20;
         consensus.nNewDiffAdjustmentAlgorithmHeight = 21000;
         consensus.nPowAveragingWindowv2 = 120;
-
-        consensus.newProofHeight = 30;
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");
@@ -257,7 +255,6 @@ public:
         consensus.nPowTargetSpacingBegin = 5 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = true;
-        consensus.newProofHeight = 30;
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");

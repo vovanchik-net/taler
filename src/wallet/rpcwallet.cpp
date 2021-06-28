@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -4792,7 +4792,7 @@ UniValue listminting(const JSONRPCRequest& request) {
     pwallet->AvailableCoins(vCoins, true, nullptr, 0, MAX_MONEY, MAX_MONEY, 0, 1);
 
     UniValue obj(UniValue::VOBJ);
-    obj.push_back(Pair("TotalCoinWithZERO", vCoins.size()));
+    obj.push_back(Pair("TotalCoinWithZERO", (int)vCoins.size()));
     ret.push_back(obj);
 
     for (auto &out: vCoins) {

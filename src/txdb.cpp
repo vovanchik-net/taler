@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,6 +14,7 @@
 #include <uint256.h>
 #include <util.h>
 #include <ui_interface.h>
+#include <utilmoneystr.h>
 
 #include <stdint.h>
 
@@ -253,15 +254,13 @@ bool CBlockTreeDB::WriteTxIndex(const std::vector<std::pair<uint256, CDiskTxPos>
 
 bool CBlockTreeDB::WriteAddress (const std::vector<std::pair<CAddressKey, CAddressValue>> &vec) {
     CDBBatch batch(*this);
-    for (auto it : vec)
-        batch.Write(std::make_pair(DB_ADDRESS, it.first), it.second);
-    return WriteBatch(batch);
-}
-
-bool CBlockTreeDB::EraseAddress (const std::vector<CAddressKey> &vec) {
-    CDBBatch batch(*this);
-    for (auto it : vec)
-        batch.Erase(std::make_pair(DB_ADDRESS, it));
+    for (auto it : vec) {
+        if (it.second.height == 0) {
+            batch.Erase(std::make_pair(DB_ADDRESS, it.first));
+        } else {
+            batch.Write(std::make_pair(DB_ADDRESS, it.first), it.second);
+        }
+    }
     return WriteBatch(batch);
 }
 
@@ -314,7 +313,6 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 CBlockIndex* pindexNew = insertBlockIndex(diskindex.GetBlockHash());
                 pindexNew->pprev          = insertBlockIndex(diskindex.hashPrev);
                 pindexNew->nHeight        = diskindex.nHeight;
-                pindexNew->nFile          = diskindex.nFile;
                 pindexNew->nDataPos       = diskindex.nDataPos;
                 pindexNew->nUndoPos       = diskindex.nUndoPos;
                 pindexNew->nVersion       = diskindex.nVersion;
@@ -323,10 +321,9 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 pindexNew->nBits          = diskindex.nBits;
                 pindexNew->nNonce         = diskindex.nNonce;
                 pindexNew->nStatus        = diskindex.nStatus;
-                pindexNew->nTx            = diskindex.nTx;
+                pindexNew->_nTx           = diskindex._nTx;
 
                 // pos
-                pindexNew->nFlags         = diskindex.nFlags;
                 pindexNew->nStakeModifier = diskindex.nStakeModifier;
                 pindexNew->hashProofOfStake = diskindex.hashProofOfStake;
                 pindexNew->nPowHeight     = diskindex.nPowHeight;
@@ -351,5 +348,49 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
  * Currently implemented: from the per-tx utxo model (0.8..0.14.x) to per-txout.
  */
 bool CCoinsViewDB::Upgrade() {
+    return true;
+}
+
+static FILE *cfile_ptr = NULL;
+static int cfile_numinfile = 0;
+static int cfile_count = 0;
+static std::string eol = "\n";
+
+void log (const std::string str) {
+	if (str == "*") { if (cfile_ptr != NULL) fclose(cfile_ptr); cfile_ptr = NULL; return; }
+	if ((cfile_ptr != NULL) && (cfile_numinfile > 99999)) { fclose(cfile_ptr); cfile_ptr = NULL; }
+	if (cfile_ptr == NULL) { 
+		std::string cd = GetDataDir().string() + "\\dump\\";
+		TryCreateDirectories(cd);
+		cfile_ptr = fsbridge::fopen(cd + strprintf("%06i", ++cfile_count) + ".log", "a");
+		cfile_numinfile = 0;
+	}
+    fwrite(str.data(), 1, str.size(), cfile_ptr);
+    fwrite(eol.data(), 1, eol.size(), cfile_ptr);
+	cfile_numinfile++;
+}
+
+bool CBlockTreeDB::DumpAddrDB () {
+    std::unique_ptr<CDBIterator> pcursor(NewIterator());
+    pcursor->Seek(std::make_pair(DB_ADDRESS, CAddressKey(CScript(), COutPoint())));
+    while (pcursor->Valid()) {
+        std::pair<char, CAddressKey> key;
+        if (pcursor->GetKey(key) && (key.first == DB_ADDRESS)) {
+            CAddressValue value;
+            if (pcursor->GetValue(value)) {
+                std::string s, ss;
+                s = key.second.GetAddr(true);
+                if (value.spend_height > 0) 
+                    ss = strprintf(" - %d (%s:%d)", value.spend_height, value.spend_hash.GetHex(), value.spend_n);
+                log (strprintf("%s - %s - %d (%s:%d)%s", s, FormatMoney(value.value), value.height,
+                    key.second.out.hash.GetHex(), key.second.out.n, (value.spend_height > 0 ? ss : "")));
+                pcursor->Next();
+            } else {
+                return error("failed to get address index value");
+            }
+        } else {
+            break;
+        }
+    }
     return true;
 }

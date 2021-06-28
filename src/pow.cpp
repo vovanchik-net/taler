@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -187,26 +187,28 @@ uint32_t GetNextWorkRequired(const CBlockIndex *pindexLast, const CBlockHeader *
     if (params.forkNumber(pindexLast->nHeight + 1) < 3)
         return fProofOfStake ? GetNextWorkRequiredForPos(pindexLast, pblock, params) :
                                GetNextWorkRequiredForPow(pindexLast, pblock, params);
-    //v1.7 Calc difficulty PoW & PoS. Copyright by Uladzimir(https://t.me/vovanchik_net)
-    arith_uint256 bnOld, bnNew, bnLimit = fProofOfStake ? params.posLimit : params.powLimitLegacy;
+    arith_uint256 bnOld, bnNew, bnLimit = params.powLimitLegacy;
     const CBlockIndex* pPrev = pindexLast;
+    while (pPrev && (pPrev->IsProofOfStake() != fProofOfStake)) pPrev = pPrev->pprev;
     int64_t srcTimes = 0;
-    int64_t nTimes = 0;
-    int TargetSpacing = params.nPowTargetSpacingBegin / 5;    
     int destBlockCount = 12;
-    for (int i = 0; i < destBlockCount; i++) {
-        while (pPrev && (pPrev->IsProofOfStake() != fProofOfStake)) pPrev = pPrev->pprev;
-        if (pPrev == nullptr) return bnLimit.GetCompact();
-        if (pPrev->pprev == nullptr) return bnLimit.GetCompact();
-        if (i == 0) { bnOld.SetCompact (pPrev->nBits); nTimes = pindexLast->GetBlockTime() - pPrev->GetBlockTime(); }
-        bnNew += arith_uint256().SetCompact(pPrev->nBits) * (destBlockCount - i); 
-        srcTimes += std::max(pPrev->GetBlockTime() - pPrev->pprev->GetBlockTime(), (int64_t)0);
-        pPrev = pPrev->pprev;
+    if (pPrev && (pindexLast->nHeight - pPrev->nHeight > destBlockCount)) {
+        bnNew = arith_uint256().SetCompact(pPrev->nBits) << 3;
+        if (bnNew > bnLimit) bnNew = bnLimit;
+        return bnNew.GetCompact();
     }
-    bnNew /= 2 * 78 * destBlockCount * TargetSpacing;
+    for (int i = 0; i < destBlockCount; i++) {
+        if (pPrev == nullptr) return bnLimit.GetCompact();
+        if (i == 0) { bnOld.SetCompact (pPrev->nBits); }
+        bnNew += arith_uint256().SetCompact(pPrev->nBits);
+        const CBlockIndex* pPrevPrev = pPrev;
+        while (pPrevPrev && (pPrevPrev->IsProofOfStake() != fProofOfStake)) pPrevPrev = pPrevPrev->pprev;
+        if (pPrevPrev == nullptr) return bnLimit.GetCompact();
+        srcTimes += std::max(pPrev->GetBlockTime() - pPrevPrev->GetBlockTime(), (int64_t)0);
+        pPrev = pPrevPrev;
+    }
+    bnNew /= destBlockCount * 2 * params.nPowTargetSpacingBegin / 5;
     bnNew *= srcTimes;
-    nTimes /= TargetSpacing;
-    while (nTimes > destBlockCount) { bnNew <<= 1; nTimes--; if (bnNew > bnLimit) break; }
     if (bnNew > (bnOld << 2)) bnNew = bnOld << 2;
     if (bnNew < (bnOld >> 3)) bnNew = bnOld >> 3;
     if (bnNew > bnLimit) bnNew = bnLimit;

@@ -1,5 +1,5 @@
 // Copyright (c) 2012-2018 The Bitcoin Core developers
-// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,6 +7,25 @@
 
 #include <consensus/consensus.h>
 #include <random.h>
+
+#include <script/standard.h>
+#include <key_io.h>
+#include <core_io.h>
+
+void CAddressKey::SetScript(const CScript& pscript) {
+    script = pscript;
+    script2.clear();
+    CTxDestination ar;
+    if (ExtractDestination(script, ar)) script2 = GetScriptForDestination(ar);
+    if (script == script2) script2.clear();
+}
+
+std::string CAddressKey::GetAddr (bool asmifnull) {
+    CTxDestination ar;
+    if (ExtractDestination (GetScript(), ar)) return EncodeDestination(ar);
+    if (asmifnull) return ScriptToAsmStr (GetScript());
+    return "";
+};
 
 bool CCoinsView::GetCoin(const COutPoint &outpoint, Coin &coin) const { return false; }
 uint256 CCoinsView::GetBestBlock() const { return uint256(); }

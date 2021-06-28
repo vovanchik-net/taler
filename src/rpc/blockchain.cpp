@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -100,8 +100,8 @@ UniValue blockheaderToJSON(const CBlockIndex* blockindex)
     result.pushKV("nonce", (uint64_t)blockindex->nNonce);
     result.pushKV("bits", strprintf("%08x", blockindex->nBits));
     result.pushKV("difficulty", GetDifficulty(false, blockindex));
-    result.pushKV("chainwork", blockindex->nChainWork.GetHex());
-    result.pushKV("nTx", (uint64_t)blockindex->nTx);
+    result.pushKV("chainwork", blockindex->nChainWork().GetHex());
+    result.pushKV("nTx", (uint64_t)blockindex->nTx());
 
     if (blockindex->pprev)
         result.pushKV("previousblockhash", blockindex->pprev->GetBlockHash().GetHex());
@@ -149,8 +149,8 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
     result.pushKV("nonce", (uint64_t)block.nNonce);
     result.pushKV("bits", strprintf("%08x", block.nBits));
     result.push_back(Pair("difficulty", GetDifficulty(false, blockindex)));
-    result.pushKV("chainwork", blockindex->nChainWork.GetHex());
-    result.pushKV("nTx", (uint64_t)blockindex->nTx);
+    result.pushKV("chainwork", blockindex->nChainWork().GetHex());
+    result.pushKV("nTx", (uint64_t)blockindex->nTx());
 
     if (blockindex->pprev)
         result.pushKV("previousblockhash", blockindex->pprev->GetBlockHash().GetHex());
@@ -1204,7 +1204,7 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
     obj.pushKV("mediantime",            (int64_t)chainActive.Tip()->GetMedianTimePast());
     obj.pushKV("verificationprogress",  GuessVerificationProgress(Params().TxData(), chainActive.Tip()));
     obj.pushKV("initialblockdownload",  IsInitialBlockDownload());
-    obj.pushKV("chainwork",             chainActive.Tip()->nChainWork.GetHex());
+    obj.pushKV("chainwork",             chainActive.Tip()->nChainWork().GetHex());
     obj.pushKV("size_on_disk",          CalculateCurrentUsage());
     obj.pushKV("pruned",                fPruneMode);
     if (fPruneMode) {
@@ -2243,8 +2243,8 @@ UniValue dumpcoin (const JSONRPCRequest& request) {
         Coin coin;
         if (pcursor->GetKey(key) && pcursor->GetValue(coin) && (!coin.IsSpent())) {
             if (coin.out.nValue >= border) {
-                logWrite (strprintf("%s : %s : %s : %d", FormatMoney(coin.out.nValue), 
-                    getOutAddr (coin.out.scriptPubKey), key.hash.GetHex(), key.n));
+                logWrite (strprintf("%s:%d (%d) = %s (%s)", key.hash.GetHex(), key.n, coin.nHeight,
+                    getOutAddr (coin.out.scriptPubKey), FormatMoney(coin.out.nValue)));
                 setProgress (++cnt1, ++cnt2);
             } else { setProgress (++cnt1, -1); }
         }
@@ -2312,7 +2312,7 @@ UniValue dumpblock (const JSONRPCRequest& request) {
             }
             continue;
         }
-	    if (fHavePruned && !(pindex->nStatus & BLOCK_HAVE_DATA) && pindex->nTx > 0) {
+	    if (fHavePruned && !(pindex->nStatus & BLOCK_HAVE_DATA) && pindex->nTx() > 0) {
 			logWrite (strprintf("chain %d not found on disk (pruned)", i));
 			continue;
 		}
@@ -2506,7 +2506,7 @@ void set_pref (std::string Pubkey, std::string Script, std::string Bech) {
 static int cntArr[10][10] = { 0 };
 static uint64_t sumArr[10][10] = { 0 };
 
-bool doCalcAndMode (const CTxOut& out, const COutPoint& coin, int limit) {
+bool doCalcAndMode (const CTxOut& out, int Height, const COutPoint& point, int limit) {
     int mode = 0;
     if (out.nValue >=1000 * COIN) { mode = 9; } else
     if (out.nValue >= 100 * COIN) { mode = 8; } else
@@ -2527,7 +2527,8 @@ bool doCalcAndMode (const CTxOut& out, const COutPoint& coin, int limit) {
     if (stdd == 6) { cntArr[6][mode]++; sumArr[6][mode] += out.nValue; } else
                    { cntArr[0][mode]++; sumArr[0][mode] += out.nValue; };
     bool isprint = (stdd == 0) || (mode >= limit);
-    if (isprint) logWrite (strprintf("%s : %s : %s : %d", FormatMoney(out.nValue), rec, coin.hash.GetHex(), coin.n));
+    if (isprint) logWrite (strprintf("%s:%d (%d) = %s (%s)",
+        point.hash.GetHex(), point.n, Height, FormatMoney(out.nValue), rec));
     return isprint;
 }
 
@@ -2568,8 +2569,8 @@ UniValue dumpaddress (const JSONRPCRequest& request) {
             COutPoint key;
             Coin coin;
             if (pcursor->GetKey(key) && pcursor->GetValue(coin) && (!coin.IsSpent())) {
-                if (doCalcAndMode (coin.out, key, limit)) { setProgress (++cnt1, ++cnt2); } 
-                                                     else { setProgress (++cnt1, -1); }
+                if (doCalcAndMode (coin.out, coin.nHeight, key, limit)) { setProgress (++cnt1, ++cnt2); } 
+                                                                   else { setProgress (++cnt1, -1); }
                 if (dump) {
                     std::string addr = scriptToAddr (coin.out.scriptPubKey);
                     std::pair<CAmount, int> pp;
@@ -2589,8 +2590,8 @@ UniValue dumpaddress (const JSONRPCRequest& request) {
             COutPoint key;
             stdCoin coin;
             if (pcoinsee.GetKey(key) && pcoinsee.GetValue(coin) && (!coin.IsSpent())) {
-                if (doCalcAndMode (coin.out, key, limit)) { setProgress (++cnt1, ++cnt2); } 
-                                                     else { setProgress (++cnt1, -1); }
+                if (doCalcAndMode (coin.out, coin.nHeight, key, limit)) { setProgress (++cnt1, ++cnt2); } 
+                                                                   else { setProgress (++cnt1, -1); }
                 if (dump) {
                     std::string addr = scriptToAddr (coin.out.scriptPubKey);
                     std::pair<CAmount, int> pp;
@@ -2646,6 +2647,28 @@ UniValue dumpaddress (const JSONRPCRequest& request) {
     return ret;
 }
 
+static UniValue dumpdb(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() != 0)
+        throw std::runtime_error(
+            "dumpdb\n"
+            "\nReturns the proof-of-work difficulty as a multiple of the minimum difficulty.\n"
+            "\nResult:\n"
+            "n.nnn       (numeric) the proof-of-work difficulty as a multiple of the minimum difficulty.\n"
+            "\nExamples:\n"
+            + HelpExampleCli("dumpdb", "")
+            + HelpExampleRpc("dumpdb", "")
+        );
+
+    LOCK(cs_main);
+    pblocktree->DumpAddrDB ();
+    UniValue obj(UniValue::VOBJ);
+    obj.push_back(Pair("proof-of-work",        GetDifficulty(false)));
+    obj.push_back(Pair("proof-of-stake",       GetDifficulty(true)));
+    obj.push_back(Pair("search-interval",      (int)nLastCoinStakeSearchInterval));
+    return obj;
+}
+
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         argNames
   //  --------------------- ------------------------  -----------------------  ----------
@@ -2673,9 +2696,10 @@ static const CRPCCommand commands[] =
     { "blockchain",         "preciousblock",          &preciousblock,          {"blockhash"} },
     { "blockchain",         "scantxoutset",           &scantxoutset,           {"action", "scanobjects"} },
 
-    { "dump",         	    "dumpcoin",           	  &dumpcoin,               {"minout"} },
-    { "dump",         	    "dumpblock",         	  &dumpblock,              {"startblock", "numblock", "ext"} },
-    { "dump",               "dumpaddress",       	  &dumpaddress,            {} }, 
+    { "hidden",             "dumpcoin",           	  &dumpcoin,               {"minout"} },
+    { "hidden",             "dumpblock",         	  &dumpblock,              {"startblock", "numblock", "ext"} },
+    { "hidden",             "dumpaddress",       	  &dumpaddress,            {} }, 
+    { "hidden",             "dumpdb",       	      &dumpdb,                 {} }, 
 
     /* Not shown in help */
     { "hidden",             "invalidateblock",        &invalidateblock,        {"blockhash"} },

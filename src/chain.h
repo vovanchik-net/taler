@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020 Uladzimir(https://t.me/vovanchik_net) for Taler
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,7 +20,7 @@
  * Maximum amount of time that a block timestamp is allowed to exceed the
  * current network-adjusted time before the block will be accepted.
  */
-static const int64_t MAX_FUTURE_BLOCK_TIME = 20 * 60;
+static const int64_t MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60;
 
 /**
  * Timestamp window used as a grace period by code that compares external
@@ -188,7 +188,8 @@ public:
     int nPowHeight;
 
     //! Which # file this block is stored in (blk?????.dat)
-    int nFile;
+    int nFile () const { return _nTx >> 16; }
+    void nFile_set (int nFile) { _nTx &= 0xFFFF; _nTx |= nFile << 16; }
 
     //! Byte offset within blk?????.dat where this block's data is stored
     unsigned int nDataPos;
@@ -197,11 +198,25 @@ public:
     unsigned int nUndoPos;
 
     //! (memory only) Total amount of work (expected number of hashes) in the chain up to and including this block
-    arith_uint256 nChainWork;
+    uint32_t _nChainWork[4];
+
+    arith_uint256 nChainWork () const {
+        arith_uint256 ret(0);
+        ret.set_data(0, _nChainWork[0]);        ret.set_data(1, _nChainWork[1]);
+        ret.set_data(2, _nChainWork[2]);        ret.set_data(3, _nChainWork[3]);
+        return ret;
+    }
+
+    void nChainWork_set (const arith_uint256& nChainWork) {
+        _nChainWork[0] = nChainWork.get_data(0);        _nChainWork[1] = nChainWork.get_data(1);
+        _nChainWork[2] = nChainWork.get_data(2);        _nChainWork[3] = nChainWork.get_data(3);
+    }
 
     //! Number of transactions in this block.
     //! Note: in a potential headers-first mode, this number cannot be relied upon
-    unsigned int nTx;
+    unsigned int _nTx;
+    int nTx () const { return _nTx & 0xFFFF; }
+    void nTx_set (int nTx) { _nTx &= 0xFFFF0000; _nTx |= nTx; }
 
     //! (memory only) Number of transactions in the chain up to and including this block.
     //! This value will be non-zero only if and only if transactions for this block and all its parents are available.
@@ -219,13 +234,24 @@ public:
     uint32_t nNonce;
 
     //pos
-    uint32_t nFlags; // block index flags
+    uint32_t nFlags () const {
+        uint32_t nFlags = 0;
+        if (nStatus & 0x00010000) nFlags |= BLOCK_PROOF_OF_STAKE;
+        if (nStatus & 0x00020000) nFlags |= BLOCK_STAKE_MODIFIER;
+        if (nStatus & 0x00040000) nFlags |= BLOCK_NEW_FORMAT;
+        return nFlags;
+    }
+    void nFlags_set (uint32_t nFlags) { 
+        if (nFlags & BLOCK_PROOF_OF_STAKE) nStatus |= 0x00010000;
+        if (nFlags & BLOCK_STAKE_MODIFIER) nStatus |= 0x00020000;
+        if (nFlags & BLOCK_NEW_FORMAT) nStatus |= 0x00040000;
+    }
     uint64_t nStakeModifier; // hash modifier for proof-of-stake
     uint256 hashProofOfStake;
 
     bool IsProofOfStake() const {
         return ((nVersion & 0xFF010000) == 0x00010000) ? (nVersion & 0x00020000) 
-                                                       : (nFlags & BLOCK_PROOF_OF_STAKE);
+                                                       : (nStatus & 0x00010000); // (nFlags() & BLOCK_PROOF_OF_STAKE);
     }
 
     bool IsProofOfWork() const {
@@ -239,14 +265,14 @@ public:
 
     bool GeneratedStakeModifier() const
     {
-        return (nFlags & BLOCK_STAKE_MODIFIER);
+        return nStatus & 0x00020000; //(nFlags() & BLOCK_STAKE_MODIFIER);
     }
 
     void SetStakeModifier(uint64_t nModifier, bool fGeneratedStakeModifier)
     {
         nStakeModifier = nModifier;
         if (fGeneratedStakeModifier)
-            nFlags |= BLOCK_STAKE_MODIFIER;
+            nStatus |= 0x00020000; //nFlags |= BLOCK_STAKE_MODIFIER;
     }
 
     void SetNull()
@@ -256,11 +282,10 @@ public:
         pskip = nullptr;
         nHeight = 0;
         nPowHeight = 0;
-        nFile = 0;
         nDataPos = 0;
         nUndoPos = 0;
-        nChainWork = arith_uint256();
-        nTx = 0;
+        _nChainWork[0] = _nChainWork[1] = _nChainWork[2] = _nChainWork[3] = 0;
+        _nTx = 0;
         nChainTx = 0;
         nStatus = 0;
 
@@ -270,7 +295,6 @@ public:
         nBits          = 0;
         nNonce         = 0;
 
-        nFlags = 0;
         nStakeModifier = 0;
         hashProofOfStake = uint256();
     }
@@ -289,13 +313,13 @@ public:
         nTime          = block.nTime;
         nBits          = block.nBits;
         nNonce         = block.nNonce;
-        nFlags         = block.nFlags;
+        nFlags_set (block.nFlags);
     }
 
     CDiskBlockPos GetBlockPos() const {
         CDiskBlockPos ret;
         if (nStatus & BLOCK_HAVE_DATA) {
-            ret.nFile = nFile;
+            ret.nFile = nFile();
             ret.nPos  = nDataPos;
         }
         return ret;
@@ -304,7 +328,7 @@ public:
     CDiskBlockPos GetUndoPos() const {
         CDiskBlockPos ret;
         if (nStatus & BLOCK_HAVE_UNDO) {
-            ret.nFile = nFile;
+            ret.nFile = nFile();
             ret.nPos  = nUndoPos;
         }
         return ret;
@@ -320,7 +344,8 @@ public:
         block.nTime          = nTime;
         block.nBits          = nBits;
         block.nNonce         = nNonce;
-        block.nFlags         = (nFlags & BLOCK_PROOF_OF_STAKE) | (nFlags & BLOCK_NEW_FORMAT);
+//        block.nFlags         = (nFlags & BLOCK_PROOF_OF_STAKE) | (nFlags & BLOCK_NEW_FORMAT);
+        block.nFlags         = nFlags() & (BLOCK_PROOF_OF_STAKE | BLOCK_NEW_FORMAT);
         return block;
     }
 
@@ -353,7 +378,7 @@ public:
     std::string ToString() const
     {
         return strprintf("CBlockIndex(nprev=%08x, nFile=%d, nHeight=%d, nPowHeight=%d, nFlags=(%s)(%d)(%s), nStakeModifier=%016llx, hashProofOfStake=%s, merkle=%s, hashBlock=%s)",
-            pprev, nFile, nHeight, nPowHeight,
+            pprev, nFile(), nHeight, nPowHeight,
             GeneratedStakeModifier() ? "MOD" : "-", GetStakeEntropyBit(), IsProofOfStake()? "PoS" : "PoW",
             nStakeModifier, 
             hashProofOfStake.ToString().c_str(),
@@ -423,27 +448,36 @@ public:
 
         READWRITE(VARINT(nHeight, VarIntMode::NONNEGATIVE_SIGNED));
         READWRITE(VARINT(nStatus));
-        READWRITE(VARINT(nTx));
-        if (nStatus & (BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO))
-            READWRITE(VARINT(nFile, VarIntMode::NONNEGATIVE_SIGNED));
+        unsigned int nTx2 = 0;
+        if (!ser_action.ForRead()) { nTx2 = nTx(); }
+        READWRITE(VARINT(nTx2));
+        if (ser_action.ForRead()) { nTx_set(nTx2); }
+        if (nStatus & (BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO)) {
+            int nFile2 = 0;
+            if (!ser_action.ForRead()) { nFile2 = nFile(); }
+            READWRITE(VARINT(nFile2, VarIntMode::NONNEGATIVE_SIGNED));
+            if (ser_action.ForRead()) { nFile_set(nFile2); }
+        }
         if (nStatus & BLOCK_HAVE_DATA)
             READWRITE(VARINT(nDataPos));
         if (nStatus & BLOCK_HAVE_UNDO)
             READWRITE(VARINT(nUndoPos));
 
         if (Params().forkNumber(nHeight) >= 3) {
-            nFlags = 0;
             nStakeModifier = 0;
             hashProofOfStake = uint256();
-            nPowHeight = nHeight;
+            READWRITE(VARINT(nPowHeight, VarIntMode::NONNEGATIVE_SIGNED));
         } else {    
-            READWRITE(nFlags);
+            uint32_t nFlags2 = 0;
+            if (!ser_action.ForRead()) { nFlags2 = nFlags (); }
+            READWRITE(nFlags2);
+            if (ser_action.ForRead()) { nFlags_set (nFlags2); }
             READWRITE(nStakeModifier);
             if (Params().forkNumber(nHeight) >= 2) {
                 if (IsProofOfStake()) {
                     READWRITE(hashProofOfStake);
                 } else if (ser_action.ForRead()) {
-                    const_cast<CDiskBlockIndex*>(this)->hashProofOfStake = uint256();
+                    hashProofOfStake = uint256();
                 };
                 READWRITE(VARINT(nPowHeight, VarIntMode::NONNEGATIVE_SIGNED));
             } else {
@@ -472,7 +506,7 @@ public:
         block.nTime           = nTime;
         block.nBits           = nBits;
         block.nNonce          = nNonce;
-        block.nFlags          = (nFlags & BLOCK_PROOF_OF_STAKE);
+        block.nFlags          = (nFlags() & BLOCK_PROOF_OF_STAKE);
         return block.GetHash();
     }
 

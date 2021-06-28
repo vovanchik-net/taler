@@ -1,5 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
+// Copyright (c) 2019-2021 Uladzimir (https://t.me/vovanchik_net)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -239,6 +240,8 @@ public:
      * value is zero.
      */
     unsigned int bits() const;
+    uint32_t get_data (int index) const { return pn[index]; }
+    void set_data (int index, uint32_t dat) { pn[index] = dat; }
 
     uint64_t GetLow64() const
     {
